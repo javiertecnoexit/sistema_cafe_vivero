@@ -1,0 +1,27 @@
+{% extends "nursery/base.html" %}
+{% block title %}Gráfico multi-planta{% endblock %}
+{% block content %}
+  <h2>Gráfico de crecimiento multi-planta</h2>
+  <div class="card">
+    <form method="get" action="{% url 'grafico_plantas' %}">
+      <p>Elegí dos o más plantas (altura en cm):</p>
+      {% for planta in plantas_disponibles %}
+        <label>
+          <input type="checkbox" name="plantas" value="{{ planta.pk }}"
+            {% if planta in seleccionadas %}checked{% endif %}>
+          {{ planta.codigo }} — {{ planta.variedad }}
+        </label><br>
+      {% endfor %}
+      <button type="submit">Graficar</button>
+    </form>
+  </div>
+  {% if seleccionadas %}
+    <div class="card">
+      {% if svg_multi %}
+        {{ svg_multi|safe }}
+      {% else %}
+        <p>Las plantas seleccionadas no tienen mediciones de altura.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+{% endblock %}

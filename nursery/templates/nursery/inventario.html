@@ -1,0 +1,97 @@
+{% extends "nursery/base.html" %}
+{% block title %}Inventario{% endblock %}
+{% block content %}
+  <h2>Inventario</h2>
+  <div class="card">
+    <form method="get" action="{% url 'inventario' %}">
+      <div style="display:flex; gap:1rem; flex-wrap:wrap">
+        <div>
+          <label>Variedad</label>
+          <select name="variedad">
+            <option value="">Todas</option>
+            {% for variedad in variedades %}
+              <option value="{{ variedad.pk }}" {% if filtros.variedad == variedad.pk|stringformat:"s" %}selected{% endif %}>{{ variedad.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Origen</label>
+          <select name="origen">
+            <option value="">Todos</option>
+            <option value="proveedor" {% if filtros.origen == "proveedor" %}selected{% endif %}>Proveedor</option>
+            <option value="propia" {% if filtros.origen == "propia" %}selected{% endif %}>Propia</option>
+          </select>
+        </div>
+        <div>
+          <label>Lote</label>
+          <select name="lote">
+            <option value="">Todos</option>
+            {% for lote in lotes %}
+              <option value="{{ lote.pk }}" {% if filtros.lote == lote.pk|stringformat:"s" %}selected{% endif %}>{{ lote.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Etapa</label>
+          <select name="etapa">
+            <option value="">Todas</option>
+            {% for etapa in etapas %}
+              <option value="{{ etapa.pk }}" {% if filtros.etapa == etapa.pk|stringformat:"s" %}selected{% endif %}>{{ etapa.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Estado</label>
+          <select name="estado">
+            <option value="">Todos</option>
+            {% for valor, etiqueta in planta_choices %}
+              <option value="{{ valor }}" {% if filtros.estado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <button type="submit">Filtrar</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Contadores por estado</h3>
+    <p>
+      {% for contador in contadores_lista %}
+        {{ contador.etiqueta }}: <strong>{{ contador.total }}</strong>
+        {% if not forloop.last %} · {% endif %}
+      {% endfor %}
+    </p>
+  </div>
+
+  <table class="card" style="width:100%; border-collapse:collapse">
+    <thead>
+      <tr style="text-align:left">
+        <th>Código</th>
+        <th>Variedad</th>
+        <th>Origen</th>
+        <th>Etapa</th>
+        <th>Lote</th>
+        <th>Estado</th>
+        <th>Última altura</th>
+        <th>Tasa crecimiento</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for planta in plantas %}
+        <tr>
+          <td><a href="{% url 'ficha_planta' planta.pk %}">{{ planta.codigo }}</a></td>
+          <td>{{ planta.variedad }}</td>
+          <td>{{ planta.get_origen_display }}</td>
+          <td>{{ planta.etapa|default:"—" }}</td>
+          <td>{{ planta.lote|default:"—" }}</td>
+          <td>{{ planta.get_estado_display }}</td>
+          <td>{{ planta.ultima_altura|default:"—" }}</td>
+          <td>{{ planta.tasa_crecimiento|default:"—" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8">No hay plantas que coincidan con los filtros.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

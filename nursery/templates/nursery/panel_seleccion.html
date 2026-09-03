@@ -1,0 +1,93 @@
+{% extends "nursery/base.html" %}
+{% block title %}Panel de selección{% endblock %}
+{% block content %}
+  <h2>Panel de selección</h2>
+  <p>Índice compuesto = Crecimiento {{ pesos_display.crecimiento }} % · Esbeltez {{ pesos_display.esbeltez }} % · Vigor {{ pesos_display.vigor }} % · Sanidad {{ pesos_display.sanidad }} %</p>
+
+  <div class="card">
+    <form method="get" action="{% url 'panel_seleccion' %}">
+      <div style="display:flex; gap:1rem; flex-wrap:wrap">
+        <div><label>Tasa mín (cm/semana)</label>
+          <input type="number" step="0.1" name="tasa_min" value="{{ filtros.tasa_min|default:'' }}"></div>
+        <div><label>Esbeltez mín</label>
+          <input type="number" step="0.1" name="esbeltez_min" value="{{ filtros.esbeltez_min|default:'' }}"></div>
+        <div><label>Esbeltez máx</label>
+          <input type="number" step="0.1" name="esbeltez_max" value="{{ filtros.esbeltez_max|default:'' }}"></div>
+        <div><label>Vigor ≥</label>
+          <input type="number" min="1" max="5" name="vigor_min" value="{{ filtros.vigor_min|default:'' }}"></div>
+        <div><label>Sanidad ≥</label>
+          <input type="number" min="1" max="5" name="sanidad_min" value="{{ filtros.sanidad_min|default:'' }}"></div>
+        <div><label>Eventos fitos ≤</label>
+          <input type="number" min="0" name="fitos_max" value="{{ filtros.fitos_max|default:'' }}"></div>
+        <div><label>Variedad</label>
+          <select name="variedad">
+            <option value="">Todas</option>
+            {% for variedad in variedades %}
+              <option value="{{ variedad.pk }}" {% if filtros.variedad == variedad.pk|stringformat:"s" %}selected{% endif %}>{{ variedad.nombre }}</option>
+            {% endfor %}
+          </select></div>
+        <div><label>Origen</label>
+          <select name="origen">
+            <option value="">Todos</option>
+            <option value="proveedor" {% if filtros.origen == "proveedor" %}selected{% endif %}>Proveedor</option>
+            <option value="propia" {% if filtros.origen == "propia" %}selected{% endif %}>Propia</option>
+          </select></div>
+        <div><label>Lote</label>
+          <select name="lote">
+            <option value="">Todos</option>
+            {% for lote in lotes %}
+              <option value="{{ lote.pk }}" {% if filtros.lote == lote.pk|stringformat:"s" %}selected{% endif %}>{{ lote.nombre }}</option>
+            {% endfor %}
+          </select></div>
+        <div><label>Etapa</label>
+          <select name="etapa">
+            <option value="">Todas</option>
+            {% for etapa in etapas %}
+              <option value="{{ etapa.pk }}" {% if filtros.etapa == etapa.pk|stringformat:"s" %}selected{% endif %}>{{ etapa.nombre }}</option>
+            {% endfor %}
+          </select></div>
+        <div><label>Ordenar por</label>
+          <select name="orden_por">
+            {% for clave, etiqueta in claves_orden %}
+              <option value="{{ clave }}" {% if filtros.orden_por == clave %}selected{% endif %}>{{ etiqueta }}</option>
+            {% endfor %}
+          </select></div>
+        <div><label>Dirección</label>
+          <select name="direccion">
+            <option value="desc" {% if filtros.direccion == "asc" %}{% else %}selected{% endif %}>Mejor primero</option>
+            <option value="asc" {% if filtros.direccion == "asc" %}selected{% endif %}>Peor primero</option>
+          </select></div>
+      </div>
+      <button type="submit">Aplicar</button>
+      <a class="proximamente" href="{% url 'seleccion_csv' %}?{{ csv_query }}" style="display:inline-block; padding:.5rem .8rem; background:#1565c0; color:#fff; text-decoration:none; border-radius:6px">Exportar CSV</a>
+    </form>
+  </div>
+
+  <table class="card" style="width:100%; border-collapse:collapse">
+    <thead>
+      <tr style="text-align:left">
+        <th>Código</th><th>Variedad</th><th>Origen</th><th>Lote</th><th>Estado</th>
+        <th>Tasa</th><th>Esbeltez</th><th>Vigor</th><th>Sanidad</th><th>Fitos</th><th>Índice</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fila in filas %}
+        <tr>
+          <td><a href="{% url 'ficha_planta' fila.planta.pk %}">{{ fila.planta.codigo }}</a></td>
+          <td>{{ fila.planta.variedad }}</td>
+          <td>{{ fila.planta.get_origen_display }}</td>
+          <td>{{ fila.planta.lote|default:"—" }}</td>
+          <td>{{ fila.planta.get_estado_display }}</td>
+          <td>{{ fila.tasa|default:"—" }}</td>
+          <td>{{ fila.esbeltez|default:"—" }}</td>
+          <td>{{ fila.vigor|default:"—" }}</td>
+          <td>{{ fila.sanidad|default:"—" }}</td>
+          <td>{{ fila.planta.n_eventos_fitosanitarios }}</td>
+          <td><strong>{{ fila.indice }}</strong></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="11">Ninguna planta cumple los filtros.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "nursery/base.html" %}
+{% block title %}Evento — {{ planta.codigo }}{% endblock %}
+{% block content %}
+  <h2>Registrar evento — {{ planta.codigo }}</h2>
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Guardar evento</button>
+    </form>
+  </div>
+  <p><a href="{% url 'ficha_planta' planta.pk %}">Volver a la ficha</a></p>
+{% endblock %}

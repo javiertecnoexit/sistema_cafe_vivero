@@ -1,0 +1,41 @@
+{% extends "nursery/base.html" %}
+{% block title %}Gráfico {{ planta.codigo }}{% endblock %}
+{% block content %}
+  <h2>Gráfico de crecimiento — {{ planta.codigo }}</h2>
+  {% for grafico in graficos %}
+    <div class="card">
+      <h3>{{ grafico.titulo }}</h3>
+      {% if grafico.svg %}
+        {{ grafico.svg|safe }}
+      {% else %}
+        <p>Sin datos para esta serie.</p>
+      {% endif %}
+    </div>
+  {% endfor %}
+  <div class="card">
+    <h3>Valores</h3>
+    <table style="width:100%; border-collapse:collapse">
+      <thead>
+        <tr style="text-align:left">
+          <th>Fecha</th>
+          <th>Altura (cm)</th>
+          <th>Diámetro (mm)</th>
+          <th>Esbeltez</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in mediciones %}
+          <tr>
+            <td>{{ m.fecha|date:"d/m/Y" }}</td>
+            <td>{{ m.altura_cm|default:"—" }}</td>
+            <td>{{ m.diametro_tallo_mm|default:"—" }}</td>
+            <td>{% if m.altura_cm and m.diametro_tallo_mm %}{{ m.indice_esbeltez|default:"—" }}{% else %}—{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4">Sin mediciones.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p><a href="{% url 'ficha_planta' planta.pk %}">Volver a la ficha</a></p>
+{% endblock %}

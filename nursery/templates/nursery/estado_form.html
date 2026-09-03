@@ -1,0 +1,14 @@
+{% extends "nursery/base.html" %}
+{% block title %}Cambiar estado — {{ planta.codigo }}{% endblock %}
+{% block content %}
+  <h2>Cambiar estado — {{ planta.codigo }}</h2>
+  <p>Estado actual: {{ planta.get_estado_display }}</p>
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Guardar estado</button>
+    </form>
+  </div>
+  <p><a href="{% url 'ficha_planta' planta.pk %}">Volver a la ficha</a></p>
+{% endblock %}

@@ -2,6 +2,8 @@
 
 > Documento de diseño funcional y técnico. Fase 1: CRUD base.
 > Proyecto orientado a la **selección de ejemplares** de café mejor adaptados al clima de Buenos Aires.
+>
+> Desglose de etapas, tareas y tests: [`docs/tasks.md`](tasks.md).
 
 ---
 

@@ -1,0 +1,84 @@
+{% extends "nursery/base.html" %}
+{% block title %}Ficha {{ planta.codigo }}{% endblock %}
+{% block content %}
+  <h2>Ficha rápida — {{ planta.codigo }}</h2>
+  <div class="card">
+    <table class="datos">
+      <tr><td>Variedad</td><td>{{ planta.variedad }}</td></tr>
+      <tr><td>Origen</td><td>{{ planta.get_origen_display }}</td></tr>
+      <tr><td>Etapa</td><td>{{ planta.etapa|default:"—" }}</td></tr>
+      <tr><td>Lote</td><td>{{ planta.lote|default:"—" }}</td></tr>
+      <tr><td>Estado</td><td>{{ planta.get_estado_display }}</td></tr>
+      <tr><td>Contenedor</td><td>{{ planta.get_contenedor_display }}</td></tr>
+      <tr><td>Fecha de alta</td><td>{{ planta.fecha_alta }}</td></tr>
+      <tr><td>Última altura</td><td>{{ planta.ultima_altura|default:"—" }} cm</td></tr>
+      <tr><td>Último diámetro</td><td>{{ planta.ultimo_diametro|default:"—" }} mm</td></tr>
+      <tr><td>Última medición</td><td>{{ planta.ultima_fecha_medicion|default:"—" }}</td></tr>
+      <tr><td>Tasa de crecimiento</td><td>{{ planta.tasa_crecimiento|default:"—" }} cm/semana</td></tr>
+      <tr><td>Índice de esbeltez</td><td>{{ planta.indice_esbeltez|default:"—" }}</td></tr>
+      <tr><td>Eventos fitosanitarios</td><td>{{ planta.n_eventos_fitosanitarios }}</td></tr>
+      <tr><td>Vigor actual</td><td>{{ planta.score_vigor_actual|default:"—" }}</td></tr>
+      <tr><td>Sanidad actual</td><td>{{ planta.score_sanidad_actual|default:"—" }}</td></tr>
+    </table>
+  </div>
+  <div class="acciones">
+    <a href="{% url 'medir_planta' planta.pk %}">Medir</a>
+    <a href="{% url 'evento_planta' planta.pk %}">Evento</a>
+    <a href="{% url 'foto_planta' planta.pk %}">Foto</a>
+    <a href="{% url 'cambiar_estado' planta.pk %}">Cambiar estado</a>
+    <a href="{% url 'grafico_planta' planta.pk %}">Gráfico</a>
+    <a href="{% url 'evento_nuevo' %}">Evento por lote / masivo</a>
+  </div>
+  {% if es_admin %}
+  <div class="card">
+    Enlace público:
+    {% if planta.publico_activo %}
+      <a href="{% url 'ficha_publica' planta.token_publico %}" target="_blank" rel="noopener">Ver página pública</a>
+    {% else %}
+      <em>Desactivado</em>
+    {% endif %}
+    <form method="post" action="{% url 'alternar_publico' planta.pk %}" style="display:inline">
+      {% csrf_token %}
+      <button type="submit" class="salir">{% if planta.publico_activo %}Desactivar{% else %}Activar{% endif %}</button>
+    </form>
+  </div>
+{% endif %}
+{% if foto_actual %}
+    <div class="card">
+      <img src="{{ foto_actual.imagen.url }}" alt="Foto de {{ planta.codigo }}" style="max-width:100%">
+    </div>
+  {% endif %}
+  <h3>Fotos</h3>
+  <div class="card galeria">
+    {% for foto in fotos %}
+      <div style="display:inline-block; margin:.4rem; vertical-align:top">
+        <a href="{{ foto.imagen.url }}" target="_blank" rel="noopener">
+          <img src="{{ foto.imagen.url }}" alt="{{ foto.tipo }} {{ foto.fecha|date:'d/m/Y' }}" style="max-width:140px; height:auto; border:1px solid #ddd">
+        </a>
+        <div style="font-size:.85em">{{ foto.tipo }} · {{ foto.fecha|date:"d/m/Y" }}</div>
+      </div>
+    {% empty %}
+      <p>Sin fotos.</p>
+    {% endfor %}
+  </div>
+  <h3>Línea de tiempo</h3>
+  <div class="card">
+    {% if timeline %}
+      <ul style="list-style:none; padding:0">
+        {% for item in timeline %}
+          <li style="border-bottom:1px solid #eee; padding:.5rem 0">
+            <strong>{{ item.fecha|date:"d/m/Y" }}</strong> ·
+            <span class="etiqueta-tipo">{{ item.tipo }}</span>
+            <div>{{ item.descripcion }}</div>
+            {% if item.imagen %}
+              <img src="{{ item.imagen.url }}" alt="{{ item.tipo }}" style="max-width:120px">
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Sin actividad registrada para esta planta.</p>
+    {% endif %}
+    <p class="aviso" style="font-size:.85em">El historial de cambios de estado requiere un modelo propio (fase posterior); el estado actual se muestra arriba.</p>
+  </div>
+{% endblock %}

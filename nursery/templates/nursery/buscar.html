@@ -1,0 +1,13 @@
+{% extends "nursery/base.html" %}
+{% block title %}Buscar planta{% endblock %}
+{% block content %}
+  <h2>Buscar planta por código</h2>
+  <form method="get" action="{% url 'buscar_planta' %}">
+    <label for="codigo">Código</label>
+    <input type="text" name="codigo" id="codigo" value="{{ codigo }}" placeholder="CAT-0001" autofocus>
+    <button type="submit">Buscar</button>
+  </form>
+  {% if no_encontrada %}
+    <p class="aviso">No se encontró ninguna planta con el código "{{ codigo }}".</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Planta {{ planta.codigo }}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f4f1ea; color: #222; }
+    main { max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    .card { background: #fff; border-radius: 8px; padding: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+    h2 { color: #3e2723; }
+    table.datos td { padding: .25rem .5rem; }
+    table.datos td:first-child { font-weight: 600; }
+    img.miniatura { max-width: 140px; height: auto; border: 1px solid #ddd; margin: .2rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h2>{{ planta.codigo }}</h2>
+      <table class="datos">
+        <tr><td>Variedad</td><td>{{ planta.variedad }}</td></tr>
+        <tr><td>Origen</td><td>{{ planta.get_origen_display }}</td></tr>
+        <tr><td>Etapa</td><td>{{ planta.etapa|default:"—" }}</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Historial</h3>
+      {% if timeline %}
+        <ul style="list-style:none; padding:0">
+          {% for item in timeline %}
+            <li style="border-bottom:1px solid #eee; padding:.5rem 0">
+              <strong>{{ item.fecha|date:"d/m/Y" }}</strong> · {{ item.tipo }} — {{ item.descripcion }}
+              {% if item.imagen %}
+                <br><img class="miniatura" src="{{ item.imagen.url }}" alt="{{ item.tipo }}">
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>Sin actividad registrada.</p>
+      {% endif %}
+    </div>
+    {% if fotos %}
+      <div class="card">
+        <h3>Fotos</h3>
+        {% for foto in fotos %}
+          <a href="{{ foto.imagen.url }}" target="_blank" rel="noopener">
+            <img class="miniatura" src="{{ foto.imagen.url }}" alt="{{ foto.tipo }} {{ foto.fecha|date:'d/m/Y' }}">
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </main>
+</body>
+</html>

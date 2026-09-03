@@ -1,0 +1,66 @@
+{% extends "nursery/base.html" %}
+{% block title %}Reportes{% endblock %}
+{% block content %}
+  <h2>Reportes por procedencia</h2>
+
+  <div class="card">
+    <h3>Supervivencia por procedencia</h3>
+    <p>% de supervivencia = (activas + vendidas + regaladas + seleccionadas) / total × 100.</p>
+    <table style="width:100%; border-collapse:collapse">
+      <thead>
+        <tr style="text-align:left">
+          <th>Procedencia</th>
+          {% for etiqueta in estados_columnas %}
+            <th>{{ etiqueta }}</th>
+          {% endfor %}
+          <th>Total</th>
+          <th>Sobrevivientes</th>
+          <th>% supervivencia</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in supervivencia %}
+          <tr>
+            <td>{{ fila.procedencia }}</td>
+            {% for columna in fila.columnas %}
+              <td>{{ columna.cantidad }}</td>
+            {% endfor %}
+            <td>{{ fila.total }}</td>
+            <td>{{ fila.sobrevivientes }}</td>
+            <td>{{ fila.porcentaje|default:"—" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="{{ estados_columnas|length|add:4 }}">Sin plantas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Desempeño agregado (promedios, ignorando valores sin dato)</h3>
+    <table style="width:100%; border-collapse:collapse">
+      <thead>
+        <tr style="text-align:left">
+          <th>Variedad</th>
+          <th>Procedencia</th>
+          <th>Altura media (cm)</th>
+          <th>Diámetro medio (mm)</th>
+          <th>Tasa media (cm/semana)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fila in desempeno %}
+          <tr>
+            <td>{{ fila.variedad }}</td>
+            <td>{{ fila.procedencia }}</td>
+            <td>{{ fila.promedio_altura|default:"—" }}</td>
+            <td>{{ fila.promedio_diametro|default:"—" }}</td>
+            <td>{{ fila.promedio_tasa|default:"—" }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="5">Sin plantas.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

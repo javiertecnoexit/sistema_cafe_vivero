@@ -1,0 +1,13 @@
+{% extends "nursery/base.html" %}
+{% block title %}Evento por lote o masivo{% endblock %}
+{% block content %}
+  <h2>Evento por lote o por códigos</h2>
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Guardar evento</button>
+    </form>
+  </div>
+  <p><a href="{% url 'buscar_planta' %}">Volver</a></p>
+{% endblock %}
