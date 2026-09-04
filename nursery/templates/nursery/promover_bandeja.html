@@ -1,0 +1,13 @@
+{% extends "nursery/base.html" %}
+{% block title %}Promover bandeja{% endblock %}
+{% block content %}
+  <h2>Promover bandeja a plantas</h2>
+  <div class="card">
+    <p>Las sobrevivientes de la bandeja pasan a ser plantas individuales (la bandeja no se modifica).</p>
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Promover</button>
+    </form>
+  </div>
+{% endblock %}

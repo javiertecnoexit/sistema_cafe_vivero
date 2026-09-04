@@ -2,6 +2,7 @@ from django.contrib import admin
 
 from .models import (
     Bandeja,
+    CambioEstado,
     EtapaFenologica,
     Evaluacion,
     Evento,
@@ -27,4 +28,5 @@ admin.site.register(Medicion)
 admin.site.register(Evaluacion)
 admin.site.register(Evento)
 admin.site.register(Foto)
+admin.site.register(CambioEstado)
 

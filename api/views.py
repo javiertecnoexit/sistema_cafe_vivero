@@ -1,5 +1,6 @@
-from django.db.models import F
+from django.db.models import Count, F
 from rest_framework import viewsets
+from rest_framework.exceptions import ValidationError
 
 from nursery.models import (
     Bandeja,
@@ -96,12 +97,24 @@ class PlantaViewSet(viewsets.ModelViewSet):
         return queryset
 
 
+def _esta_salida(planta):
+    return planta.estado in Planta.ESTADOS_DE_SALIDA
+
+
+def _rechazar_si_salida(planta):
+    if _esta_salida(planta):
+        raise ValidationError(
+            "No se puede capturar sobre una planta en estado de salida."
+        )
+
+
 class MedicionViewSet(viewsets.ModelViewSet):
     queryset = Medicion.objects.all()
     serializer_class = MedicionSerializer
     permission_classes = [PermisoEscrituraPorModelo]
 
     def perform_create(self, serializer):
+        _rechazar_si_salida(serializer.validated_data["planta"])
         serializer.save(autor=self.request.user)
 
 
@@ -111,6 +124,7 @@ class EvaluacionViewSet(viewsets.ModelViewSet):
     permission_classes = [PermisoEscrituraPorModelo]
 
     def perform_create(self, serializer):
+        _rechazar_si_salida(serializer.validated_data["planta"])
         serializer.save(autor=self.request.user)
 
 
@@ -120,6 +134,11 @@ class EventoViewSet(viewsets.ModelViewSet):
     permission_classes = [PermisoEscrituraPorModelo]
 
     def perform_create(self, serializer):
+        plantas = serializer.validated_data.get("plantas") or []
+        if any(_esta_salida(planta) for planta in plantas):
+            raise ValidationError(
+                "No se puede capturar sobre una planta en estado de salida."
+            )
         evento = serializer.save(autor=self.request.user)
         if Evento._es_tipo_fitosanitario(evento.tipo):
             ids = list(evento.plantas.values_list("id", flat=True))
@@ -127,6 +146,31 @@ class EventoViewSet(viewsets.ModelViewSet):
                 Planta.objects.filter(id__in=ids).update(
                     n_eventos_fitosanitarios=F("n_eventos_fitosanitarios") + 1
                 )
+
+    def perform_update(self, serializer):
+        antes = set(serializer.instance.plantas.values_list("id", flat=True))
+        evento = serializer.save()
+        despues = set(evento.plantas.values_list("id", flat=True))
+        afectadas = antes | despues
+        if not afectadas:
+            return
+        tipos_fito = {
+            tipo.pk
+            for tipo in TipoEvento.objects.all()
+            if Evento._es_tipo_fitosanitario(tipo)
+        }
+        filas = (
+            Evento.objects.filter(
+                plantas__id__in=afectadas, tipo_id__in=tipos_fito
+            )
+            .values("plantas__id")
+            .annotate(total=Count("id"))
+        )
+        cuentas = {fila["plantas__id"]: fila["total"] for fila in filas}
+        for planta_id in afectadas:
+            Planta.objects.filter(pk=planta_id).update(
+                n_eventos_fitosanitarios=cuentas.get(planta_id, 0)
+            )
 
     def perform_destroy(self, instance):
         instance.delete()
@@ -138,6 +182,7 @@ class FotoViewSet(viewsets.ModelViewSet):
     permission_classes = [PermisoEscrituraPorModelo]
 
     def perform_create(self, serializer):
+        _rechazar_si_salida(serializer.validated_data["planta"])
         serializer.save(autor=self.request.user)
 
 

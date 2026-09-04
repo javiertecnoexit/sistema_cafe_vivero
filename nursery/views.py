@@ -10,14 +10,18 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic.edit import CreateView
 
+from .etiquetas import generar_codigos, generar_pdf_etiquetas
 from .forms import (
     EstadoForm,
+    EtiquetasForm,
     EventoForm,
     EventoSeleccionForm,
     FotoForm,
     MedicionForm,
+    PromocionForm,
 )
 from .models import (
+    CambioEstado,
     EtapaFenologica,
     Evento,
     Foto,
@@ -74,6 +78,19 @@ def _construir_timeline(planta):
                 "imagen": None,
             }
         )
+    for cambio in planta.cambios_estado.all():
+        descripcion = f"→ {cambio.estado_nuevo}"
+        if cambio.estado_anterior:
+            descripcion = f"{cambio.estado_anterior} → {cambio.estado_nuevo}"
+        items.append(
+            {
+                "fecha": cambio.fecha,
+                "pk": cambio.pk,
+                "tipo": "Estado",
+                "descripcion": descripcion,
+                "imagen": None,
+            }
+        )
     for foto in planta.foto_set.all():
         items.append(
             {
@@ -109,6 +126,19 @@ def _construir_timeline_publica(planta):
                 "pk": evento.pk,
                 "tipo": "Evento",
                 "descripcion": evento.tipo.nombre,
+                "imagen": None,
+            }
+        )
+    for cambio in planta.cambios_estado.all():
+        descripcion = f"→ {cambio.estado_nuevo}"
+        if cambio.estado_anterior:
+            descripcion = f"{cambio.estado_anterior} → {cambio.estado_nuevo}"
+        items.append(
+            {
+                "fecha": cambio.fecha,
+                "pk": cambio.pk,
+                "tipo": "Estado",
+                "descripcion": descripcion,
                 "imagen": None,
             }
         )
@@ -152,6 +182,10 @@ def alternar_publico(request, pk):
         estado = "activado" if planta.publico_activo else "desactivado"
         messages.success(request, f"Enlace público {estado}.")
     return redirect("ficha_planta", pk=planta.pk)
+
+
+def _esta_salida(planta):
+    return planta.estado in Planta.ESTADOS_DE_SALIDA
 
 
 @login_required
@@ -231,6 +265,12 @@ class MedicionCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView
 
     def dispatch(self, request, *args, **kwargs):
         self.planta = get_object_or_404(Planta, pk=kwargs["pk"])
+        if request.user.is_authenticated and _esta_salida(self.planta):
+            messages.error(
+                request,
+                "No se puede capturar sobre una planta en estado de salida.",
+            )
+            return redirect("ficha_planta", pk=self.planta.pk)
         return super().dispatch(request, *args, **kwargs)
 
     def get_initial(self):
@@ -255,6 +295,12 @@ class MedicionCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateView
 @permission_required("nursery.add_evento", raise_exception=True)
 def evento_planta(request, pk):
     planta = get_object_or_404(Planta, pk=pk)
+    if _esta_salida(planta):
+        messages.error(
+            request,
+            "No se puede capturar sobre una planta en estado de salida.",
+        )
+        return redirect("ficha_planta", pk=planta.pk)
     form = EventoForm(request.POST or None, initial={"fecha": date.today()})
     if request.method == "POST" and form.is_valid():
         datos = form.cleaned_data
@@ -282,57 +328,102 @@ def evento_nuevo(request):
         if form.is_valid():
             datos = form.cleaned_data
             if datos["alcance"] == "lote":
-                evento = Evento.create_for_lote(
-                    tipo=datos["tipo"],
-                    fecha=datos["fecha"],
-                    lote=datos["lote"],
-                    autor=request.user,
-                    producto=datos["producto"],
-                    dosis=datos["dosis"],
-                    notas=datos["notas"],
-                )
-                mensaje = (
-                    f"Evento aplicado a {evento.plantas.count()} plantas del lote."
-                )
-                messages.success(request, mensaje)
-                return redirect("buscar_planta")
-            plantas = list(
-                Planta.objects.filter(codigo__in=datos["lista_codigos"])
-            )
-            encontrados = {planta.codigo for planta in plantas}
-            faltantes = [
-                codigo
-                for codigo in datos["lista_codigos"]
-                if codigo not in encontrados
-            ]
-            if faltantes:
-                form.add_error(
-                    "codigos",
-                    "No se encontraron las plantas: " + ", ".join(faltantes),
-                )
+                plantas = list(datos["lote"].planta_set.all())
+                if any(_esta_salida(planta) for planta in plantas):
+                    form.add_error(
+                        None,
+                        "Una o más plantas del lote están en estado de salida.",
+                    )
+                else:
+                    evento = Evento.create_for_lote(
+                        tipo=datos["tipo"],
+                        fecha=datos["fecha"],
+                        lote=datos["lote"],
+                        autor=request.user,
+                        producto=datos["producto"],
+                        dosis=datos["dosis"],
+                        notas=datos["notas"],
+                    )
+                    mensaje = (
+                        f"Evento aplicado a {evento.plantas.count()} plantas del lote."
+                    )
+                    messages.success(request, mensaje)
+                    return redirect("buscar_planta")
             else:
-                Evento.create_bulk(
-                    tipo=datos["tipo"],
-                    fecha=datos["fecha"],
-                    plantas=plantas,
-                    autor=request.user,
-                    producto=datos["producto"],
-                    dosis=datos["dosis"],
-                    notas=datos["notas"],
+                plantas = list(
+                    Planta.objects.filter(codigo__in=datos["lista_codigos"])
                 )
-                messages.success(
-                    request, f"Evento aplicado a {len(plantas)} plantas."
-                )
-                return redirect("buscar_planta")
+                encontrados = {planta.codigo for planta in plantas}
+                faltantes = [
+                    codigo
+                    for codigo in datos["lista_codigos"]
+                    if codigo not in encontrados
+                ]
+                if faltantes:
+                    form.add_error(
+                        "codigos",
+                        "No se encontraron las plantas: " + ", ".join(faltantes),
+                    )
+                elif any(_esta_salida(planta) for planta in plantas):
+                    form.add_error(
+                        None,
+                        "Una o más plantas seleccionadas están en estado de salida.",
+                    )
+                else:
+                    Evento.create_bulk(
+                        tipo=datos["tipo"],
+                        fecha=datos["fecha"],
+                        plantas=plantas,
+                        autor=request.user,
+                        producto=datos["producto"],
+                        dosis=datos["dosis"],
+                        notas=datos["notas"],
+                    )
+                    messages.success(
+                        request, f"Evento aplicado a {len(plantas)} plantas."
+                    )
+                    return redirect("buscar_planta")
     else:
         form = EventoSeleccionForm()
     return render(request, "nursery/evento_nuevo.html", {"form": form})
 
 
 @login_required
+@permission_required("nursery.view_planta", raise_exception=True)
+def comparar_fotos(request, pk):
+    planta = get_object_or_404(Planta, pk=pk)
+    fotos = list(planta.foto_set.select_related("tipo").order_by("fecha", "id"))
+
+    def foto_parametro(clave):
+        valor = request.GET.get(clave)
+        if not valor or not valor.isdigit():
+            return None
+        return next((foto for foto in fotos if foto.pk == int(valor)), None)
+
+    foto_a = foto_parametro("foto_a")
+    foto_b = foto_parametro("foto_b")
+    return render(
+        request,
+        "nursery/comparar_fotos.html",
+        {
+            "planta": planta,
+            "fotos": fotos,
+            "foto_a": foto_a,
+            "foto_b": foto_b,
+        },
+    )
+
+
+@login_required
 @permission_required("nursery.add_foto", raise_exception=True)
 def subir_foto(request, pk):
     planta = get_object_or_404(Planta, pk=pk)
+    if _esta_salida(planta):
+        messages.error(
+            request,
+            "No se puede capturar sobre una planta en estado de salida.",
+        )
+        return redirect("ficha_planta", pk=planta.pk)
     form = FotoForm(
         request.POST or None,
         request.FILES or None,
@@ -351,9 +442,32 @@ def subir_foto(request, pk):
 @permission_required("nursery.change_planta", raise_exception=True)
 def cambiar_estado(request, pk):
     planta = get_object_or_404(Planta, pk=pk)
+    estado_anterior = planta.estado
     form = EstadoForm(request.POST or None, instance=planta)
     if request.method == "POST" and form.is_valid():
-        form.save()
+        datos = form.cleaned_data
+        planta.estado = datos["estado"]
+        if planta.estado in Planta.ESTADOS_DE_SALIDA:
+            planta.fecha_baja = datos["fecha_baja"]
+            planta.motivo_baja = datos["motivo_baja"]
+        else:
+            planta.fecha_baja = None
+            planta.motivo_baja = ""
+        planta.save(update_fields=["estado", "fecha_baja", "motivo_baja"])
+        if estado_anterior != planta.estado:
+            motivo = (
+                datos["motivo_baja"]
+                if planta.estado in Planta.ESTADOS_DE_SALIDA
+                else ""
+            )
+            CambioEstado.objects.create(
+                planta=planta,
+                estado_anterior=estado_anterior,
+                estado_nuevo=planta.estado,
+                fecha=date.today(),
+                motivo=motivo,
+                autor=request.user,
+            )
         messages.success(
             request,
             f"Estado actualizado a {planta.get_estado_display()}.",
@@ -556,6 +670,7 @@ def seleccion_csv(request):
     filas = obtener_filas(request.GET)
     respuesta = HttpResponse(content_type="text/csv")
     respuesta["Content-Disposition"] = 'attachment; filename="seleccion.csv"'
+    respuesta.write("\ufeff")
     escritor = csv.writer(respuesta)
     escritor.writerow(
         [
@@ -697,5 +812,61 @@ def reportes(request):
             "desempeno": _calcular_desempeno(plantas),
             "estados_columnas": [e for _, e in Planta.ESTADO_CHOICES],
         },
+    )
+
+
+@login_required
+@permission_required("nursery.view_planta", raise_exception=True)
+def generar_etiquetas(request):
+    _requiere_admin(request)
+    form = EtiquetasForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        datos = form.cleaned_data
+        pdf = generar_pdf_etiquetas(
+            variedad=datos["variedad"],
+            cantidad=datos["cantidad"],
+            formatos=datos["formatos"],
+        )
+        respuesta = HttpResponse(pdf, content_type="application/pdf")
+        respuesta["Content-Disposition"] = 'attachment; filename="etiquetas.pdf"'
+        return respuesta
+    return render(
+        request,
+        "nursery/etiquetas.html",
+        {"form": form},
+    )
+
+
+@login_required
+@permission_required("nursery.view_planta", raise_exception=True)
+def promover_bandeja(request):
+    _requiere_admin(request)
+    form = PromocionForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        datos = form.cleaned_data
+        bandeja = datos["bandeja"]
+        codigos = generar_codigos(bandeja.variedad, datos["sobrevivientes"])
+        creadas = []
+        for codigo in codigos:
+            Planta.objects.create(
+                codigo=codigo,
+                variedad=bandeja.variedad,
+                origen=bandeja.origen,
+                proveedor=bandeja.proveedor,
+                bandeja=bandeja,
+                fecha_alta=datos["fecha_alta"],
+                lote=datos["lote"],
+                contenedor=datos["contenedor"],
+            )
+            creadas.append(codigo)
+        messages.success(
+            request,
+            f"{len(creadas)} plantas creadas: " + ", ".join(creadas) + ".",
+        )
+        return redirect("buscar_planta")
+    return render(
+        request,
+        "nursery/promover_bandeja.html",
+        {"form": form},
     )
 

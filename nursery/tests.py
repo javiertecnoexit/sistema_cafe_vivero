@@ -20,6 +20,7 @@ from .etiquetas import (
 from .seleccion import calcular_indice
 from .models import (
     Bandeja,
+    CambioEstado,
     EtapaFenologica,
     Evaluacion,
     Evento,
@@ -827,13 +828,19 @@ class CapturaAccionesUiTests(TestCase):
         self.client.force_login(self.operario)
         respuesta = self.client.post(
             reverse("cambiar_estado", args=[self.planta_1.pk]),
-            {"estado": "vendida"},
+            {
+                "estado": "vendida",
+                "fecha_baja": "2026-09-20",
+                "motivo_baja": "Venta",
+            },
         )
         self.assertRedirects(
             respuesta, reverse("ficha_planta", args=[self.planta_1.pk])
         )
         self.planta_1.refresh_from_db()
         self.assertEqual(self.planta_1.estado, "vendida")
+        self.assertEqual(self.planta_1.fecha_baja, date(2026, 9, 20))
+        self.assertEqual(self.planta_1.motivo_baja, "Venta")
 
     def test_acceso_sin_permiso_o_sin_autenticacion(self):
         respuesta_anon = self.client.get(
@@ -1153,7 +1160,9 @@ class PanelSeleccionTests(TestCase):
         )
         self.assertEqual(respuesta.status_code, 200)
         self.assertEqual(respuesta["Content-Type"], "text/csv")
+        self.assertTrue(respuesta.content.startswith(b"\xef\xbb\xbf"))
         contenido = respuesta.content.decode("utf-8")
+        self.assertTrue(contenido.startswith("\ufeff"))
         self.assertIn("codigo", contenido)
         self.assertIn("CAT-0001", contenido)
         self.assertIn("CAT-0003", contenido)
@@ -1325,4 +1334,436 @@ class ReportesTests(TestCase):
         self.assertEqual(catua_propia["promedio_tasa"], 6.0)
         bourbon_prov = por_clave[("Bourbon", "Proveedor: ProvB")]
         self.assertEqual(bourbon_prov["promedio_altura"], 40.0)
+
+
+class EtiquetasUiTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user(username="admin_etiq")
+        self.admin.groups.add(Group.objects.get(name="admin"))
+        self.no_admin = get_user_model().objects.create_user(username="no_admin_etiq")
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+
+    def test_get_como_admin_200(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.get(reverse("generar_etiquetas"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Generar etiquetas")
+
+    def test_get_no_admin_403_y_sin_login_redirect(self):
+        respuesta_anon = self.client.get(reverse("generar_etiquetas"))
+        self.assertEqual(respuesta_anon.status_code, 302)
+        self.client.force_login(self.no_admin)
+        respuesta = self.client.get(reverse("generar_etiquetas"))
+        self.assertEqual(respuesta.status_code, 403)
+
+    def test_post_genera_pdf(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse("generar_etiquetas"),
+            {
+                "variedad": self.variedad.pk,
+                "cantidad": 2,
+                "formatos": ["numerico", "qr"],
+            },
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta["Content-Type"], "application/pdf")
+        self.assertIn('filename="etiquetas.pdf"', respuesta["Content-Disposition"])
+        self.assertTrue(respuesta.content.startswith(b"%PDF"))
+
+    def test_post_sin_formatos_no_genera_pdf(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse("generar_etiquetas"),
+            {"variedad": self.variedad.pk, "cantidad": 2},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotEqual(respuesta["Content-Type"], "application/pdf")
+        self.assertFalse(respuesta.content.startswith(b"%PDF"))
+        self.assertContains(respuesta, "Generar etiquetas")
+
+
+class BajasCongelamientoUiTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user(username="admin_bajas")
+        self.admin.groups.add(Group.objects.get(name="admin"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.lote = Lote.objects.create(nombre="Lote A", tipo="lote")
+        self.planta = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+            lote=self.lote,
+        )
+        self.tipo_evento = TipoEvento.objects.create(nombre="Riego")
+
+    def _poner_en_salida(self):
+        self.planta.estado = "vendida"
+        self.planta.fecha_baja = date(2026, 9, 20)
+        self.planta.motivo_baja = "Venta"
+        self.planta.save(
+            update_fields=["estado", "fecha_baja", "motivo_baja"]
+        )
+
+    def test_cambio_a_estado_salida_guarda_datos(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse("cambiar_estado", args=[self.planta.pk]),
+            {
+                "estado": "vendida",
+                "fecha_baja": "2026-09-20",
+                "motivo_baja": "Venta",
+            },
+        )
+        self.assertRedirects(
+            respuesta, reverse("ficha_planta", args=[self.planta.pk])
+        )
+        self.planta.refresh_from_db()
+        self.assertEqual(self.planta.estado, "vendida")
+        self.assertEqual(self.planta.fecha_baja, date(2026, 9, 20))
+        self.assertEqual(self.planta.motivo_baja, "Venta")
+
+    def test_cambio_a_no_salida_limpia_datos(self):
+        self._poner_en_salida()
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse("cambiar_estado", args=[self.planta.pk]),
+            {"estado": "activa"},
+        )
+        self.assertRedirects(
+            respuesta, reverse("ficha_planta", args=[self.planta.pk])
+        )
+        self.planta.refresh_from_db()
+        self.assertEqual(self.planta.estado, "activa")
+        self.assertIsNone(self.planta.fecha_baja)
+        self.assertEqual(self.planta.motivo_baja, "")
+
+    def test_salida_sin_motivo_fecha_formulario_invalido(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse("cambiar_estado", args=[self.planta.pk]),
+            {"estado": "vendida"},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(
+            respuesta, "La fecha de baja es obligatoria en estados de salida."
+        )
+        self.planta.refresh_from_db()
+        self.assertEqual(self.planta.estado, "activa")
+
+    def test_capturas_bloqueadas_en_estado_salida(self):
+        self._poner_en_salida()
+        self.client.force_login(self.admin)
+        respuesta_medir = self.client.get(
+            reverse("medir_planta", args=[self.planta.pk])
+        )
+        self.assertRedirects(
+            respuesta_medir, reverse("ficha_planta", args=[self.planta.pk])
+        )
+        respuesta_evento = self.client.get(
+            reverse("evento_planta", args=[self.planta.pk])
+        )
+        self.assertRedirects(
+            respuesta_evento, reverse("ficha_planta", args=[self.planta.pk])
+        )
+        respuesta_foto = self.client.get(
+            reverse("foto_planta", args=[self.planta.pk])
+        )
+        self.assertRedirects(
+            respuesta_foto, reverse("ficha_planta", args=[self.planta.pk])
+        )
+        respuesta_lote = self.client.post(
+            reverse("evento_nuevo"),
+            {
+                "tipo": self.tipo_evento.pk,
+                "fecha": "2026-09-21",
+                "producto": "",
+                "dosis": "",
+                "notas": "",
+                "alcance": "lote",
+                "lote": self.lote.pk,
+                "codigos": "",
+            },
+        )
+        self.assertEqual(respuesta_lote.status_code, 200)
+        self.assertEqual(Medicion.objects.count(), 0)
+        self.assertEqual(Evento.objects.count(), 0)
+
+
+class PromocionBandejaTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user(username="admin_promo")
+        self.admin.groups.add(Group.objects.get(name="admin"))
+        self.no_admin = get_user_model().objects.create_user(username="no_admin_promo")
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.proveedor = Proveedor.objects.create(nombre="Vivero San Martín")
+        self.lote = Lote.objects.create(nombre="Invernadero A", tipo="invernadero")
+        self.bandeja_propia = Bandeja.objects.create(
+            variedad=self.variedad, origen="propia"
+        )
+        self.bandeja_proveedor = Bandeja.objects.create(
+            variedad=self.variedad,
+            origen="proveedor",
+            proveedor=self.proveedor,
+        )
+        Planta.objects.create(
+            codigo="CAT-0005",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+
+    def _datos(self, bandeja, cantidad):
+        return {
+            "bandeja": bandeja.pk,
+            "sobrevivientes": cantidad,
+            "fecha_alta": "2026-09-25",
+            "lote": self.lote.pk,
+            "contenedor": "maceta",
+        }
+
+    def test_promocion_crea_n_plantas_con_codigos_secuenciales(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse("promover_bandeja"), self._datos(self.bandeja_propia, 2)
+        )
+        self.assertRedirects(respuesta, reverse("buscar_planta"))
+        plantas = Planta.objects.filter(bandeja=self.bandeja_propia).order_by(
+            "codigo"
+        )
+        self.assertEqual(plantas.count(), 2)
+        self.assertEqual(
+            list(plantas.values_list("codigo", flat=True)),
+            ["CAT-0006", "CAT-0007"],
+        )
+        for planta in plantas:
+            self.assertEqual(planta.variedad, self.variedad)
+            self.assertEqual(planta.origen, "propia")
+            self.assertEqual(planta.bandeja, self.bandeja_propia)
+            self.assertEqual(planta.fecha_alta, date(2026, 9, 25))
+            self.assertEqual(planta.lote, self.lote)
+            self.assertEqual(planta.contenedor, "maceta")
+            self.assertEqual(planta.estado, "activa")
+
+    def test_bandeja_no_se_modifica(self):
+        self.client.force_login(self.admin)
+        antes = {
+            "origen": self.bandeja_propia.origen,
+            "n_semillas": self.bandeja_propia.n_semillas,
+            "variedad_id": self.bandeja_propia.variedad_id,
+        }
+        self.client.post(
+            reverse("promover_bandeja"), self._datos(self.bandeja_propia, 1)
+        )
+        self.bandeja_propia.refresh_from_db()
+        self.assertEqual(
+            antes,
+            {
+                "origen": self.bandeja_propia.origen,
+                "n_semillas": self.bandeja_propia.n_semillas,
+                "variedad_id": self.bandeja_propia.variedad_id,
+            },
+        )
+        self.assertEqual(Bandeja.objects.count(), 2)
+
+    def test_promocion_hereda_proveedor(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.post(
+            reverse("promover_bandeja"), self._datos(self.bandeja_proveedor, 1)
+        )
+        self.assertRedirects(respuesta, reverse("buscar_planta"))
+        planta = Planta.objects.get(bandeja=self.bandeja_proveedor)
+        self.assertEqual(planta.origen, "proveedor")
+        self.assertEqual(planta.proveedor, self.proveedor)
+
+    def test_acceso_no_admin(self):
+        respuesta_anon = self.client.get(reverse("promover_bandeja"))
+        self.assertEqual(respuesta_anon.status_code, 302)
+        self.client.force_login(self.no_admin)
+        respuesta = self.client.get(reverse("promover_bandeja"))
+        self.assertEqual(respuesta.status_code, 403)
+
+
+class CompararFotosTests(TestCase):
+    def setUp(self):
+        self.tmp_media = tempfile.TemporaryDirectory()
+        self.override = override_settings(MEDIA_ROOT=self.tmp_media.name)
+        self.override.enable()
+        self.addCleanup(self.override.disable)
+        self.addCleanup(self.tmp_media.cleanup)
+        self.usuario = get_user_model().objects.create_user(username="admin_fotos_comp")
+        self.usuario.groups.add(Group.objects.get(name="admin"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.planta = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+        self.otra_planta = Planta.objects.create(
+            codigo="CAT-0002",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+        self.tipo_foto = TipoFoto.objects.create(nombre="General")
+        self.foto_1 = Foto.objects.create(
+            planta=self.planta,
+            imagen=self._imagen("foto1.png"),
+            tipo=self.tipo_foto,
+            fecha=date(2026, 9, 1),
+            autor=self.usuario,
+        )
+        self.foto_2 = Foto.objects.create(
+            planta=self.planta,
+            imagen=self._imagen("foto2.png"),
+            tipo=self.tipo_foto,
+            fecha=date(2026, 9, 10),
+            autor=self.usuario,
+        )
+        self.foto_3 = Foto.objects.create(
+            planta=self.planta,
+            imagen=self._imagen("foto3.png"),
+            tipo=self.tipo_foto,
+            fecha=date(2026, 9, 20),
+            autor=self.usuario,
+        )
+        self.foto_otra = Foto.objects.create(
+            planta=self.otra_planta,
+            imagen=self._imagen("foto_otra.png"),
+            tipo=self.tipo_foto,
+            fecha=date(2026, 9, 5),
+            autor=self.usuario,
+        )
+
+    @staticmethod
+    def _imagen(nombre):
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), color="red").save(buffer, format="PNG")
+        return SimpleUploadedFile(
+            nombre, buffer.getvalue(), content_type="image/png"
+        )
+
+    def test_sin_parametros_lista_fotos(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(
+            reverse("comparar_fotos", args=[self.planta.pk])
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(len(respuesta.context["fotos"]), 3)
+        self.assertIsNone(respuesta.context["foto_a"])
+        self.assertIsNone(respuesta.context["foto_b"])
+        self.assertContains(respuesta, "foto1.png")
+
+    def test_con_dos_fotos_validas_muestra_ambas(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(
+            reverse("comparar_fotos", args=[self.planta.pk]),
+            {"foto_a": self.foto_1.pk, "foto_b": self.foto_2.pk},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertEqual(respuesta.context["foto_a"], self.foto_1)
+        self.assertEqual(respuesta.context["foto_b"], self.foto_2)
+        self.assertContains(respuesta, self.foto_1.imagen.url)
+        self.assertContains(respuesta, self.foto_2.imagen.url)
+
+    def test_foto_inexistente_o_de_otra_planta_se_ignora(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(
+            reverse("comparar_fotos", args=[self.planta.pk]),
+            {"foto_a": self.foto_otra.pk, "foto_b": self.foto_2.pk},
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIsNone(respuesta.context["foto_a"])
+        self.assertEqual(respuesta.context["foto_b"], self.foto_2)
+        respuesta_fantasma = self.client.get(
+            reverse("comparar_fotos", args=[self.planta.pk]),
+            {"foto_a": "9999", "foto_b": self.foto_1.pk},
+        )
+        self.assertEqual(respuesta_fantasma.status_code, 200)
+        self.assertIsNone(respuesta_fantasma.context["foto_a"])
+
+
+class HistorialEstadoTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(username="admin_historial")
+        self.usuario.groups.add(Group.objects.get(name="admin"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.planta = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+
+    def _cambiar(self, estado, motivo="", fecha_baja=""):
+        datos = {"estado": estado}
+        if estado in ("muerta", "vendida", "regalada", "descartada"):
+            datos["fecha_baja"] = fecha_baja or "2026-09-30"
+            datos["motivo_baja"] = motivo or "Salida"
+        return self.client.post(
+            reverse("cambiar_estado", args=[self.planta.pk]), datos
+        )
+
+    def test_cambio_crea_registro_con_datos(self):
+        self.client.force_login(self.usuario)
+        self._cambiar("vendida", motivo="Venta")
+        registro = CambioEstado.objects.get()
+        self.assertEqual(registro.planta, self.planta)
+        self.assertEqual(registro.estado_anterior, "activa")
+        self.assertEqual(registro.estado_nuevo, "vendida")
+        self.assertEqual(registro.fecha, date.today())
+        self.assertEqual(registro.motivo, "Venta")
+        self.assertEqual(registro.autor, self.usuario)
+
+    def test_mismo_estado_no_crea_registro(self):
+        self.client.force_login(self.usuario)
+        respuesta = self._cambiar("activa")
+        self.assertRedirects(
+            respuesta, reverse("ficha_planta", args=[self.planta.pk])
+        )
+        self.assertEqual(CambioEstado.objects.count(), 0)
+
+    def test_timeline_incluye_item_estado(self):
+        self.client.force_login(self.usuario)
+        self._cambiar("vendida", motivo="Venta")
+        respuesta = self.client.get(
+            reverse("ficha_planta", args=[self.planta.pk])
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        tipos = [item["tipo"] for item in respuesta.context["timeline"]]
+        self.assertIn("Estado", tipos)
+        estado = next(
+            item for item in respuesta.context["timeline"] if item["tipo"] == "Estado"
+        )
+        self.assertEqual(estado["descripcion"], "activa → vendida")
+
+    def test_ficha_publica_no_expone_autor(self):
+        self.client.force_login(self.usuario)
+        self._cambiar("vendida", motivo="Venta")
+        self.planta.publico_activo = True
+        self.planta.save(update_fields=["publico_activo"])
+        respuesta = self.client.get(
+            reverse("ficha_publica", args=[self.planta.token_publico])
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        contenido = respuesta.content.decode("utf-8")
+        self.assertIn("Estado", contenido)
+        self.assertNotIn("admin_historial", contenido)
 

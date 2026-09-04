@@ -1,0 +1,13 @@
+{% extends "nursery/base.html" %}
+{% block title %}Generar etiquetas{% endblock %}
+{% block content %}
+  <h2>Generar etiquetas</h2>
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Generar PDF</button>
+    </form>
+  </div>
+  <p>Se generará un PDF descargable con una etiqueta por código (formatos: numérico, QR y/o Code128).</p>
+{% endblock %}

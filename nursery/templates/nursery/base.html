@@ -34,6 +34,8 @@
           {% if grupo.name == 'admin' %}
             <a href="{% url 'panel_seleccion' %}">Selección</a>
             <a href="{% url 'reportes' %}">Reportes</a>
+            <a href="{% url 'generar_etiquetas' %}">Etiquetas</a>
+            <a href="{% url 'promover_bandeja' %}">Promover bandeja</a>
           {% endif %}
         {% endfor %}
       {% endif %}

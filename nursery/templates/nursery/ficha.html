@@ -2,6 +2,9 @@
 {% block title %}Ficha {{ planta.codigo }}{% endblock %}
 {% block content %}
   <h2>Ficha rápida — {{ planta.codigo }}</h2>
+  {% if planta.estado == 'muerta' or planta.estado == 'vendida' or planta.estado == 'regalada' or planta.estado == 'descartada' %}
+    <p class="aviso">Planta en estado de salida ({{ planta.get_estado_display }}). El seguimiento está congelado; no se admiten nuevas capturas.</p>
+  {% endif %}
   <div class="card">
     <table class="datos">
       <tr><td>Variedad</td><td>{{ planta.variedad }}</td></tr>
@@ -9,6 +12,12 @@
       <tr><td>Etapa</td><td>{{ planta.etapa|default:"—" }}</td></tr>
       <tr><td>Lote</td><td>{{ planta.lote|default:"—" }}</td></tr>
       <tr><td>Estado</td><td>{{ planta.get_estado_display }}</td></tr>
+      {% if planta.fecha_baja %}
+        <tr><td>Fecha de baja</td><td>{{ planta.fecha_baja }}</td></tr>
+      {% endif %}
+      {% if planta.motivo_baja %}
+        <tr><td>Motivo de baja</td><td>{{ planta.motivo_baja }}</td></tr>
+      {% endif %}
       <tr><td>Contenedor</td><td>{{ planta.get_contenedor_display }}</td></tr>
       <tr><td>Fecha de alta</td><td>{{ planta.fecha_alta }}</td></tr>
       <tr><td>Última altura</td><td>{{ planta.ultima_altura|default:"—" }} cm</td></tr>
@@ -49,6 +58,7 @@
     </div>
   {% endif %}
   <h3>Fotos</h3>
+  <p><a href="{% url 'comparar_fotos' planta.pk %}">Comparar fotos</a></p>
   <div class="card galeria">
     {% for foto in fotos %}
       <div style="display:inline-block; margin:.4rem; vertical-align:top">

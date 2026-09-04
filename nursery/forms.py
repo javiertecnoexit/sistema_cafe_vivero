@@ -3,7 +3,16 @@ from datetime import date
 
 from django import forms
 
-from .models import Evento, Foto, Lote, Medicion, Planta, TipoEvento
+from .models import (
+    Bandeja,
+    Evento,
+    Foto,
+    Lote,
+    Medicion,
+    Planta,
+    TipoEvento,
+    Variedad,
+)
 
 
 class MedicionForm(forms.ModelForm):
@@ -84,4 +93,65 @@ class FotoForm(forms.ModelForm):
 class EstadoForm(forms.ModelForm):
     class Meta:
         model = Planta
-        fields = ("estado",)
+        fields = ("estado", "fecha_baja", "motivo_baja")
+        widgets = {
+            "fecha_baja": forms.DateInput(attrs={"type": "date"}),
+            "motivo_baja": forms.TextInput(),
+        }
+
+    def clean(self):
+        data = super().clean()
+        estado = data.get("estado")
+        if estado in Planta.ESTADOS_DE_SALIDA:
+            if not data.get("fecha_baja"):
+                self.add_error(
+                    "fecha_baja", "La fecha de baja es obligatoria en estados de salida."
+                )
+            if not data.get("motivo_baja"):
+                self.add_error(
+                    "motivo_baja", "El motivo de baja es obligatorio en estados de salida."
+                )
+        else:
+            data["fecha_baja"] = None
+            data["motivo_baja"] = ""
+        return data
+
+
+class EtiquetasForm(forms.Form):
+    FORMATOS_CHOICES = [
+        ("numerico", "Numérico"),
+        ("qr", "QR"),
+        ("code128", "Code128"),
+    ]
+
+    variedad = forms.ModelChoiceField(
+        queryset=Variedad.objects.order_by("nombre"), label="Variedad"
+    )
+    cantidad = forms.IntegerField(min_value=1, initial=1)
+    formatos = forms.MultipleChoiceField(
+        choices=FORMATOS_CHOICES,
+        widget=forms.CheckboxSelectMultiple,
+        label="Formatos",
+    )
+
+
+class PromocionForm(forms.Form):
+    bandeja = forms.ModelChoiceField(
+        queryset=Bandeja.objects.order_by("-id"), label="Bandeja"
+    )
+    sobrevivientes = forms.IntegerField(min_value=1, label="Sobrevivientes")
+    fecha_alta = forms.DateField(
+        initial=date.today,
+        widget=forms.DateInput(attrs={"type": "date"}),
+        label="Fecha de alta",
+    )
+    lote = forms.ModelChoiceField(
+        queryset=Lote.objects.order_by("nombre"),
+        required=False,
+        label="Lote (opcional)",
+    )
+    contenedor = forms.ChoiceField(
+        choices=Planta.CONTENEDOR_CHOICES,
+        initial="suelo",
+        label="Contenedor",
+    )

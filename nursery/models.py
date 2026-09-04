@@ -96,6 +96,7 @@ class Planta(models.Model):
         ("descartada", "Descartada"),
         ("seleccionada", "Seleccionada"),
     ]
+    ESTADOS_DE_SALIDA = ("muerta", "vendida", "regalada", "descartada")
 
     codigo = models.CharField(max_length=20, unique=True)
     variedad = models.ForeignKey(Variedad, on_delete=models.PROTECT)
@@ -115,6 +116,8 @@ class Planta(models.Model):
     estado = models.CharField(
         max_length=20, choices=ESTADO_CHOICES, default="activa"
     )
+    fecha_baja = models.DateField(null=True, blank=True)
+    motivo_baja = models.CharField(max_length=200, blank=True)
     notas = models.TextField(blank=True)
     token_publico = models.UUIDField(unique=True, default=uuid.uuid4, editable=False)
     publico_activo = models.BooleanField(default=False)
@@ -330,4 +333,21 @@ class Foto(models.Model):
             self.__class__.objects.filter(
                 planta=self.planta, tipo=self.tipo, activa=True
             ).exclude(pk=self.pk).update(activa=False)
+
+
+class CambioEstado(models.Model):
+    planta = models.ForeignKey(
+        Planta, on_delete=models.CASCADE, related_name="cambios_estado"
+    )
+    estado_anterior = models.CharField(
+        max_length=20, choices=Planta.ESTADO_CHOICES, blank=True
+    )
+    estado_nuevo = models.CharField(max_length=20, choices=Planta.ESTADO_CHOICES)
+    fecha = models.DateField()
+    motivo = models.CharField(max_length=200, blank=True)
+    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+
+    def __str__(self):
+        anterior = self.estado_anterior or "—"
+        return f"{self.planta}: {anterior} → {self.estado_nuevo} ({self.fecha})"
 

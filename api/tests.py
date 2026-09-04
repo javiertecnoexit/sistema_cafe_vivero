@@ -348,3 +348,163 @@ class RefuerzoApiTests(APITestCase):
         self.planta.refresh_from_db()
         self.assertEqual(self.planta.n_eventos_fitosanitarios, 0)
 
+
+class CongelamientoSalidaApiTests(APITestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user(username="admin_congela")
+        self.admin.groups.add(Group.objects.get(name="admin"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.planta = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+            estado="vendida",
+            fecha_baja=date(2026, 9, 20),
+            motivo_baja="Venta",
+        )
+        self.tipo_evento = TipoEvento.objects.create(nombre="Riego")
+        self.tipo_foto = TipoFoto.objects.create(nombre="Hoja")
+
+    def _cliente(self):
+        cliente = APIClient()
+        cliente.force_authenticate(user=self.admin)
+        return cliente
+
+    def _imagen(self):
+        buffer = BytesIO()
+        Image.new("RGB", (10, 10), color="red").save(buffer, format="PNG")
+        return SimpleUploadedFile(
+            "foto.png", buffer.getvalue(), content_type="image/png"
+        )
+
+    def test_post_medicion_sobre_salida_400(self):
+        respuesta = self._cliente().post(
+            reverse("medicion-list"),
+            {
+                "planta": self.planta.pk,
+                "fecha": "2026-09-21",
+                "altura_cm": 12.0,
+            },
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(Medicion.objects.count(), 0)
+
+    def test_post_evento_sobre_salida_400(self):
+        respuesta = self._cliente().post(
+            reverse("evento-list"),
+            {
+                "tipo": self.tipo_evento.pk,
+                "fecha": "2026-09-21",
+                "plantas": [self.planta.pk],
+            },
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(Evento.objects.count(), 0)
+
+    def test_post_foto_sobre_salida_400(self):
+        respuesta = self._cliente().post(
+            reverse("foto-list"),
+            {
+                "imagen": self._imagen(),
+                "tipo": self.tipo_foto.pk,
+                "fecha": "2026-09-21",
+                "activa": True,
+            },
+            format="multipart",
+        )
+        self.assertEqual(respuesta.status_code, 400)
+        self.assertEqual(Foto.objects.count(), 0)
+
+
+class ResincronizacionEventoApiTests(APITestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_user(username="admin_resync")
+        self.admin.groups.add(Group.objects.get(name="admin"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.planta_1 = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+        self.planta_2 = Planta.objects.create(
+            codigo="CAT-0002",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+        self.tipo_riego = TipoEvento.objects.create(nombre="Riego")
+        self.tipo_fito = TipoEvento.objects.create(nombre="Fitosanitario")
+
+    def _cliente(self):
+        cliente = APIClient()
+        cliente.force_authenticate(user=self.admin)
+        return cliente
+
+    def _crear_evento(self, tipo, plantas):
+        cliente = self._cliente()
+        respuesta = cliente.post(
+            reverse("evento-list"),
+            {
+                "tipo": tipo.pk,
+                "fecha": "2026-09-11",
+                "plantas": [planta.pk for planta in plantas],
+            },
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 201)
+        return respuesta.data["id"]
+
+    def test_patch_tipo_a_fitosanitario_incrementa(self):
+        evento_pk = self._crear_evento(self.tipo_riego, [self.planta_1])
+        respuesta = self._cliente().patch(
+            reverse("evento-detail", args=[evento_pk]),
+            {"tipo": self.tipo_fito.pk},
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.planta_1.refresh_from_db()
+        self.assertEqual(self.planta_1.n_eventos_fitosanitarios, 1)
+
+    def test_patch_tipo_desde_fitosanitario_decrementa(self):
+        evento_pk = self._crear_evento(self.tipo_fito, [self.planta_1])
+        self.planta_1.refresh_from_db()
+        self.assertEqual(self.planta_1.n_eventos_fitosanitarios, 1)
+        respuesta = self._cliente().patch(
+            reverse("evento-detail", args=[evento_pk]),
+            {"tipo": self.tipo_riego.pk},
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.planta_1.refresh_from_db()
+        self.assertEqual(self.planta_1.n_eventos_fitosanitarios, 0)
+
+    def test_patch_m2m_resincroniza(self):
+        evento_pk = self._crear_evento(
+            self.tipo_fito, [self.planta_1, self.planta_2]
+        )
+        self.planta_1.refresh_from_db()
+        self.planta_2.refresh_from_db()
+        self.assertEqual(self.planta_1.n_eventos_fitosanitarios, 1)
+        self.assertEqual(self.planta_2.n_eventos_fitosanitarios, 1)
+        respuesta = self._cliente().patch(
+            reverse("evento-detail", args=[evento_pk]),
+            {"plantas": [self.planta_2.pk]},
+            format="json",
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.planta_1.refresh_from_db()
+        self.planta_2.refresh_from_db()
+        self.assertEqual(self.planta_1.n_eventos_fitosanitarios, 0)
+        self.assertEqual(self.planta_2.n_eventos_fitosanitarios, 1)
+

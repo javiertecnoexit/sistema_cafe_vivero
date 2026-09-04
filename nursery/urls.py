@@ -12,6 +12,8 @@ urlpatterns = [
     path("seleccion/", views.panel_seleccion, name="panel_seleccion"),
     path("seleccion/csv/", views.seleccion_csv, name="seleccion_csv"),
     path("reportes/", views.reportes, name="reportes"),
+    path("etiquetas/", views.generar_etiquetas, name="generar_etiquetas"),
+    path("bandejas/promover/", views.promover_bandeja, name="promover_bandeja"),
     path(
         "publica/<uuid:token>/", views.ficha_publica, name="ficha_publica"
     ),
@@ -32,10 +34,11 @@ urlpatterns = [
         name="evento_planta",
     ),
     path("eventos/nuevo/", views.evento_nuevo, name="evento_nuevo"),
+    path("plantas/<int:pk>/foto/", views.subir_foto, name="foto_planta"),
     path(
-        "plantas/<int:pk>/foto/",
-        views.subir_foto,
-        name="foto_planta",
+        "plantas/<int:pk>/fotos/",
+        views.comparar_fotos,
+        name="comparar_fotos",
     ),
     path(
         "plantas/<int:pk>/estado/",

@@ -1,0 +1,40 @@
+{% extends "nursery/base.html" %}
+{% block title %}Comparar fotos — {{ planta.codigo }}{% endblock %}
+{% block content %}
+  <h2>Comparar fotos — {{ planta.codigo }}</h2>
+  {% if foto_a and foto_b %}
+    <div style="display:flex; gap:1rem; flex-wrap:wrap">
+      <div style="flex:1; min-width:220px">
+        <p><strong>{{ foto_a.tipo }}</strong> · {{ foto_a.fecha|date:"d/m/Y" }}</p>
+        <img src="{{ foto_a.imagen.url }}" alt="{{ foto_a.tipo }} {{ foto_a.fecha|date:'d/m/Y' }}" style="width:100%; max-width:480px">
+      </div>
+      <div style="flex:1; min-width:220px">
+        <p><strong>{{ foto_b.tipo }}</strong> · {{ foto_b.fecha|date:"d/m/Y" }}</p>
+        <img src="{{ foto_b.imagen.url }}" alt="{{ foto_b.tipo }} {{ foto_b.fecha|date:'d/m/Y' }}" style="width:100%; max-width:480px">
+      </div>
+    </div>
+  {% else %}
+    <p>Elegí dos fotos para compararlas lado a lado.</p>
+  {% endif %}
+
+  <h3>Fotos disponibles</h3>
+  <div class="card galeria">
+    {% for foto in fotos %}
+      <div style="display:inline-block; margin:.4rem; vertical-align:top">
+        <a href="{{ foto.imagen.url }}" target="_blank" rel="noopener">
+          <img src="{{ foto.imagen.url }}" alt="{{ foto.tipo }} {{ foto.fecha|date:'d/m/Y' }}" style="max-width:140px; border:1px solid #ddd">
+        </a>
+        <div style="font-size:.85em">
+          {{ foto.tipo }} · {{ foto.fecha|date:"d/m/Y" }}
+        </div>
+        <div style="font-size:.85em">
+          <a href="{% url 'comparar_fotos' planta.pk %}?foto_a={{ foto.pk }}{% if foto_b %}&foto_b={{ foto_b.pk }}{% endif %}">como A</a> ·
+          <a href="{% url 'comparar_fotos' planta.pk %}?foto_b={{ foto.pk }}{% if foto_a %}&foto_a={{ foto_a.pk }}{% endif %}">como B</a>
+        </div>
+      </div>
+    {% empty %}
+      <p>Sin fotos.</p>
+    {% endfor %}
+  </div>
+  <p><a href="{% url 'ficha_planta' planta.pk %}">Volver a la ficha</a></p>
+{% endblock %}
