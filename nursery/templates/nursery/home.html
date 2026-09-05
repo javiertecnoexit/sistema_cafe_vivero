@@ -1,0 +1,26 @@
+{% extends "nursery/base.html" %}
+{% block title %}Inicio{% endblock %}
+{% block content %}
+  <style>
+    .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: .8rem; }
+    .home-grid a, .home-grid .proximamente { display: block; text-align: center; padding: 1.3rem .6rem; border-radius: 10px; background: #558b2f; color: #fff; text-decoration: none; font-weight: 600; font-size: 1.05rem; }
+    .home-grid .proximamente { background: #bdbdbd; color: #fff; cursor: not-allowed; }
+    .home-grid h3 { grid-column: 1 / -1; margin: .6rem 0 0; color: #3e2723; }
+  </style>
+  <h2>Acciones</h2>
+  <div class="home-grid">
+    <a href="{% url 'buscar_planta' %}">Buscar</a>
+    <a href="{% url 'evento_nuevo' %}">Nuevo evento</a>
+    <a href="{% url 'escanear' %}">Escanear código</a>
+    <a href="{% url 'nueva_planta' %}">Registrar planta</a>
+    <a href="{% url 'nueva_bandeja' %}">Registrar bandeja</a>
+    {% if es_admin %}
+      <h3>Administración</h3>
+      <a href="{% url 'inventario' %}">Inventario</a>
+      <a href="{% url 'generar_etiquetas' %}">Etiquetas</a>
+      <a href="{% url 'panel_seleccion' %}">Selección</a>
+      <a href="{% url 'reportes' %}">Reportes</a>
+      <a href="{% url 'promover_bandeja' %}">Promover bandeja</a>
+    {% endif %}
+  </div>
+{% endblock %}

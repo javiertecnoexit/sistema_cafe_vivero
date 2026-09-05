@@ -5,19 +5,22 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
+from urllib.parse import urlencode
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.generic.edit import CreateView
 
 from .etiquetas import generar_codigos, generar_pdf_etiquetas
 from .forms import (
+    BandejaForm,
     EstadoForm,
     EtiquetasForm,
     EventoForm,
     EventoSeleccionForm,
     FotoForm,
     MedicionForm,
+    PlantaForm,
     PromocionForm,
 )
 from .models import (
@@ -31,6 +34,79 @@ from .models import (
     Variedad,
 )
 from .seleccion import PESOS, obtener_filas
+
+
+@login_required
+@permission_required("nursery.view_planta", raise_exception=True)
+def home(request):
+    return render(
+        request,
+        "nursery/home.html",
+        {"es_admin": _usuario_admin(request.user)},
+    )
+
+
+@login_required
+@permission_required("nursery.view_planta", raise_exception=True)
+def escanear(request):
+    return render(request, "nursery/escanear.html")
+
+
+@login_required
+@permission_required("nursery.view_planta", raise_exception=True)
+def resolver_codigo(request):
+    codigo = request.GET.get("codigo", "").strip()
+    planta = Planta.objects.filter(codigo=codigo).first()
+    url = reverse("ficha_planta", args=[planta.pk]) if planta else None
+    url_nueva = None
+    if not planta:
+        url_nueva = (
+            reverse("nueva_planta") + "?" + urlencode({"codigo": codigo})
+        )
+    return JsonResponse(
+        {
+            "encontrada": planta is not None,
+            "codigo": codigo,
+            "url": url,
+            "url_nueva": url_nueva,
+        }
+    )
+
+
+@login_required
+@permission_required("nursery.add_planta", raise_exception=True)
+def nueva_planta(request):
+    codigo_inicial = request.GET.get("codigo", "").strip()
+    form = PlantaForm(
+        request.POST or None,
+        initial={
+            "fecha_alta": date.today(),
+            "contenedor": "maceta",
+            "codigo": codigo_inicial,
+        },
+    )
+    if request.method == "POST" and form.is_valid():
+        planta = form.save()
+        messages.success(request, f"Planta {planta.codigo} creada correctamente.")
+        return redirect("ficha_planta", pk=planta.pk)
+    return render(request, "nursery/registrar_planta.html", {"form": form})
+
+
+@login_required
+@permission_required("nursery.add_bandeja", raise_exception=True)
+def nueva_bandeja(request):
+    form = BandejaForm(
+        request.POST or None,
+        initial={"fecha_siembra": date.today()},
+    )
+    if request.method == "POST" and form.is_valid():
+        bandeja = form.save()
+        messages.success(
+            request,
+            f"Bandeja {bandeja.pk} de {bandeja.variedad} creada correctamente.",
+        )
+        return redirect("inicio")
+    return render(request, "nursery/registrar_bandeja.html", {"form": form})
 
 
 @login_required
@@ -327,7 +403,36 @@ def evento_nuevo(request):
         form = EventoSeleccionForm(request.POST)
         if form.is_valid():
             datos = form.cleaned_data
-            if datos["alcance"] == "lote":
+            if datos["alcance"] == "individual":
+                planta = Planta.objects.filter(
+                    codigo=datos["codigo_individual"]
+                ).first()
+                if planta is None:
+                    form.add_error(
+                        "codigo_individual",
+                        "No se encontró ninguna planta con ese código.",
+                    )
+                elif _esta_salida(planta):
+                    form.add_error(
+                        "codigo_individual",
+                        "La planta está en estado de salida.",
+                    )
+                else:
+                    Evento.create_individual(
+                        tipo=datos["tipo"],
+                        fecha=datos["fecha"],
+                        planta=planta,
+                        autor=request.user,
+                        producto=datos["producto"],
+                        dosis=datos["dosis"],
+                        notas=datos["notas"],
+                    )
+                    messages.success(
+                        request,
+                        f"Evento registrado para {planta.codigo}.",
+                    )
+                    return redirect("buscar_planta")
+            elif datos["alcance"] == "lote":
                 plantas = list(datos["lote"].planta_set.all())
                 if any(_esta_salida(planta) for planta in plantas):
                     form.add_error(

@@ -6,8 +6,8 @@
   <title>{% block title %}Vivero de café{% endblock %}</title>
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; background: #f4f1ea; color: #222; }
-    header { background: #3e2723; color: #fff; padding: 0.6rem 1rem; display: flex; justify-content: space-between; align-items: center; }
-    header a { color: #ffcc80; text-decoration: none; margin-right: 1rem; }
+    header { background: #3e2723; color: #fff; padding: .4rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+    header a { color: #ffcc80; text-decoration: none; display: inline-block; padding: .7rem .5rem; }
     main { max-width: 720px; margin: 1.5rem auto; padding: 0 1rem; }
     .card { background: #fff; border-radius: 8px; padding: 1.2rem; box-shadow: 0 1px 3px rgba(0,0,0,.15); }
     .mensajes p { padding: .6rem; border-radius: 6px; }
@@ -27,7 +27,7 @@
 <body>
   <header>
     <div>
-      <a href="{% url 'inicio' %}">Vivero de café</a>
+      <a href="{% url 'inicio' %}">Inicio</a>
       {% if user.is_authenticated %}
         <a href="{% url 'inventario' %}">Inventario</a>
         {% for grupo in user.groups.all %}

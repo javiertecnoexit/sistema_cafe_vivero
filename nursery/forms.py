@@ -2,7 +2,9 @@ import re
 from datetime import date
 
 from django import forms
+from django.core.exceptions import ValidationError as DjangoValidationError
 
+from .etiquetas import validar_codigo_disponible
 from .models import (
     Bandeja,
     Evento,
@@ -44,6 +46,7 @@ class EventoForm(forms.ModelForm):
 
 class EventoSeleccionForm(forms.Form):
     ALCANCE_CHOICES = [
+        ("individual", "Una planta (por código)"),
         ("lote", "Todas las plantas de un lote"),
         ("masivo", "Un conjunto de plantas por códigos"),
     ]
@@ -52,12 +55,12 @@ class EventoSeleccionForm(forms.Form):
     fecha = forms.DateField(
         initial=date.today, widget=forms.DateInput(attrs={"type": "date"})
     )
-    producto = forms.CharField(max_length=200, required=False)
-    dosis = forms.CharField(max_length=100, required=False)
-    notas = forms.CharField(
-        required=False, widget=forms.Textarea(attrs={"rows": 3})
-    )
     alcance = forms.ChoiceField(choices=ALCANCE_CHOICES, label="Aplicar a")
+    codigo_individual = forms.CharField(
+        required=False,
+        label="Código de la planta",
+        widget=forms.TextInput(attrs={"placeholder": "CAT-0001"}),
+    )
     lote = forms.ModelChoiceField(
         queryset=Lote.objects.all(), required=False, label="Lote"
     )
@@ -66,12 +69,25 @@ class EventoSeleccionForm(forms.Form):
         label="Códigos (separados por coma o espacio)",
         widget=forms.Textarea(attrs={"rows": 3}),
     )
+    producto = forms.CharField(max_length=200, required=False)
+    dosis = forms.CharField(max_length=100, required=False)
+    notas = forms.CharField(
+        required=False, widget=forms.Textarea(attrs={"rows": 3})
+    )
 
     def clean(self):
         data = super().clean()
         alcance = data.get("alcance")
-        if alcance == "lote" and not data.get("lote"):
-            self.add_error("lote", "Elegí un lote para este alcance.")
+        if alcance == "individual":
+            codigo = (data.get("codigo_individual") or "").strip()
+            if not codigo:
+                self.add_error(
+                    "codigo_individual", "Ingresá el código de la planta."
+                )
+            data["codigo_individual"] = codigo
+        elif alcance == "lote":
+            if not data.get("lote"):
+                self.add_error("lote", "Elegí un lote para este alcance.")
         elif alcance == "masivo":
             codigos = re.split(r"[\s,]+", (data.get("codigos") or "").strip())
             codigos = [c for c in codigos if c]
@@ -86,6 +102,9 @@ class FotoForm(forms.ModelForm):
         model = Foto
         fields = ("imagen", "tipo", "fecha", "activa")
         widgets = {
+            "imagen": forms.ClearableFileInput(
+                attrs={"capture": "environment", "accept": "image/*"}
+            ),
             "fecha": forms.DateInput(attrs={"type": "date"}),
         }
 
@@ -114,6 +133,74 @@ class EstadoForm(forms.ModelForm):
         else:
             data["fecha_baja"] = None
             data["motivo_baja"] = ""
+        return data
+
+
+class PlantaForm(forms.ModelForm):
+    class Meta:
+        model = Planta
+        fields = (
+            "codigo",
+            "variedad",
+            "origen",
+            "proveedor",
+            "bandeja",
+            "fecha_alta",
+            "etapa",
+            "contenedor",
+            "lote",
+            "notas",
+        )
+        widgets = {
+            "fecha_alta": forms.DateInput(attrs={"type": "date"}),
+            "notas": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def clean_codigo(self):
+        codigo = self.cleaned_data["codigo"].strip()
+        try:
+            validar_codigo_disponible(codigo)
+        except DjangoValidationError as error:
+            raise forms.ValidationError(error.messages[0])
+        return codigo
+
+    def clean(self):
+        data = super().clean()
+        origen = data.get("origen")
+        if origen == "proveedor" and not data.get("proveedor"):
+            self.add_error(
+                "proveedor", "El proveedor es obligatorio cuando el origen es proveedor."
+            )
+        elif origen == "propia":
+            data["proveedor"] = None
+        return data
+
+
+class BandejaForm(forms.ModelForm):
+    class Meta:
+        model = Bandeja
+        fields = (
+            "variedad",
+            "origen",
+            "proveedor",
+            "fecha_siembra",
+            "n_semillas",
+            "notas",
+        )
+        widgets = {
+            "fecha_siembra": forms.DateInput(attrs={"type": "date"}),
+            "notas": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def clean(self):
+        data = super().clean()
+        origen = data.get("origen")
+        if origen == "proveedor" and not data.get("proveedor"):
+            self.add_error(
+                "proveedor", "El proveedor es obligatorio cuando el origen es proveedor."
+            )
+        elif origen == "propia":
+            data["proveedor"] = None
         return data
 
 

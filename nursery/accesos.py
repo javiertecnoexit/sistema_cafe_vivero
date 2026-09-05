@@ -1,8 +1,9 @@
-"""Grupos y permisos por defecto según docs/plan.md §9.
+"""Grupos y permisos por defecto según docs/plan.md §9 y docs/mobile.md §2.1.
 
 "admin": acceso total (add/change/delete/view sobre todos los modelos).
-"operario": captura (add/change/view sobre Medicion, Evaluacion, Evento, Foto)
-y cambio de estado de Planta (change/view sobre Planta).
+"operario": captura (add/change/view sobre Medicion, Evaluacion, Evento, Foto),
+alta de Planta y Bandeja (add/change/view sobre Planta; add/view sobre Bandeja)
+y cambio de estado de Planta.
 """
 
 from django.apps import apps
@@ -32,5 +33,9 @@ def crear_grupos_y_permisos(sender, **kwargs):
             )
         elif modelo_nombre == "planta":
             grupo_operario.permissions.add(
-                *_permisos_de_modelo(modelo, ("change", "view"))
+                *_permisos_de_modelo(modelo, ("add", "change", "view"))
+            )
+        elif modelo_nombre == "bandeja":
+            grupo_operario.permissions.add(
+                *_permisos_de_modelo(modelo, ("add", "view"))
             )

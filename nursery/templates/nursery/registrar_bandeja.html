@@ -1,0 +1,13 @@
+{% extends "nursery/base.html" %}
+{% block title %}Registrar bandeja{% endblock %}
+{% block content %}
+  <h2>Registrar bandeja</h2>
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Guardar bandeja</button>
+    </form>
+  </div>
+  <p><a href="{% url 'inicio' %}">Volver al inicio</a></p>
+{% endblock %}

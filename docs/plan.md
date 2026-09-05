@@ -162,11 +162,14 @@ Sistema CRUD para gestionar un vivero de plantas de café con:
 
 | Rol | Permisos |
 |---|---|
-| Operario | Captura: medir, eventos, fotos, cambiar estado |
+| Operario | Captura: medir, eventos, fotos, cambiar estado, registrar planta/bandeja |
 | Admin (viverista) | Todo + catálogos + panel de selección + activar enlaces públicos |
 | Público (cliente) | Solo lectura de la ficha de su planta vía token |
 
 **Ficha pública**: muestra código, variedad, origen, etapa, línea de tiempo, fotos y mediciones de crecimiento. **Oculta**: proveedor, costos, notas internas y scores de vigor/sanidad.
+
+> Detalle de lo que **ve/busca/ingresa** cada rol y el rediseño móvil de campo
+> (cámara para códigos y fotos): ver [`docs/mobile.md`](mobile.md).
 
 ---
 
@@ -190,7 +193,16 @@ Sistema CRUD para gestionar un vivero de plantas de café con:
 
 ---
 
-## 12. Decisiones pendientes menores (no bloqueantes)
+## 12. Decisiones de despliegue
 
-- Proveedor de nube, dominio, estrategia de backups y almacenamiento S3 (se define al desplegar).
+- **Entorno de producción**: VPS propio gestionado con **EasyPanel**, despliegue
+  con **Docker** (Django + gunicorn + whitenoise + PostgreSQL).
+- **Almacenamiento de fotos**: disco persistente del VPS (volumen), sin S3 en
+  esta fase. `django-storages` queda instalado para un futuro escalado.
+- **Base de datos**: instancia PostgreSQL propia en el VPS.
+- Detalles operativos (dominio, HTTPS, backups, seed): ver [`docs/deploy.md`](deploy.md).
+
+**Pendientes menores (no bloqueantes):**
+
+- Dominio y credenciales de producción se definen al contratar el VPS.
 - Texto impreso en la etiqueta además del código (por defecto: solo el código en los formatos elegidos; puede añadirse variedad/fecha si se desea).

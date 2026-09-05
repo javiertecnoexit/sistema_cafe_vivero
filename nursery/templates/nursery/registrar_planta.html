@@ -1,0 +1,13 @@
+{% extends "nursery/base.html" %}
+{% block title %}Registrar planta{% endblock %}
+{% block content %}
+  <h2>Registrar planta</h2>
+  <div class="card">
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit">Guardar planta</button>
+    </form>
+  </div>
+  <p><a href="{% url 'inicio' %}">Volver al inicio</a></p>
+{% endblock %}

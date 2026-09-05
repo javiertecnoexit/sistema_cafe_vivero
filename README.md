@@ -15,6 +15,8 @@ ejemplares** mejor adaptados al clima de Buenos Aires.
 - [`docs/plan.md`](docs/plan.md) — especificación funcional y técnica (fuente de verdad).
 - [`docs/tasks.md`](docs/tasks.md) — etapas, tareas y tests (desglose de trabajo).
 - [`docs/review.md`](docs/review.md) — trazabilidad de requisitos y gaps priorizados.
+- [`docs/mobile.md`](docs/mobile.md) — roles y experiencia móvil de campo (cámara/códigos).
+- [`docs/deploy.md`](docs/deploy.md) — plan de despliegue en producción (VPS + EasyPanel).
 - [`docs/git.md`](docs/git.md) — flujo de Git y repositorio remoto.
 - [`AGENTS.md`](AGENTS.md) — roles y modo de trabajo de los agentes de IA.
 

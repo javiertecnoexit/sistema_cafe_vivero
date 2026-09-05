@@ -1,7 +1,13 @@
 {% extends "nursery/base.html" %}
-{% block title %}Evento por lote o masivo{% endblock %}
+{% block title %}Evento rápido{% endblock %}
 {% block content %}
-  <h2>Evento por lote o por códigos</h2>
+  <style>
+    .card input, .card select, .card textarea { width: 100%; box-sizing: border-box; padding: .7rem; font-size: 1.05rem; }
+    .card label { display: block; margin-top: .8rem; font-weight: 600; }
+    .card ul, .card li { list-style: none; padding: 0; margin: 0; }
+    .card li label { display: inline-block; margin-top: .3rem; }
+  </style>
+  <h2>Evento rápido</h2>
   <div class="card">
     <form method="post">
       {% csrf_token %}
@@ -9,5 +15,5 @@
       <button type="submit">Guardar evento</button>
     </form>
   </div>
-  <p><a href="{% url 'buscar_planta' %}">Volver</a></p>
+  <p><a href="{% url 'inicio' %}">Volver al inicio</a></p>
 {% endblock %}

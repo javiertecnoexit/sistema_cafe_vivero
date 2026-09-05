@@ -1,0 +1,68 @@
+{% extends "nursery/base.html" %}
+{% load static %}
+{% block title %}Escanear código{% endblock %}
+{% block content %}
+  <h2>Escanear código</h2>
+  <div class="card">
+    <div id="qr-reader"></div>
+    <p id="estado-scan">Iniciando cámara…</p>
+    <p id="aviso-no-encontrado"></p>
+    <noscript><p>Necesitás JavaScript para el escaneo; usá el campo manual.</p></noscript>
+    <hr>
+    <p><strong>Ingresá el código manualmente</strong> (si la cámara no está disponible):</p>
+    <form id="form-codigo">
+      {% csrf_token %}
+      <label for="codigo-manual">Código</label>
+      <input type="text" id="codigo-manual" placeholder="CAT-0001" autocomplete="off">
+      <button type="submit">Ir a la planta</button>
+    </form>
+  </div>
+  <script src="{% static 'nursery/html5-qrcode.min.js' %}"></script>
+  <script>
+    (function () {
+      const resolverUrl = "{% url 'resolver_codigo' %}";
+      const estado = document.getElementById("estado-scan");
+      const aviso = document.getElementById("aviso-no-encontrado");
+      const form = document.getElementById("form-codigo");
+      const campo = document.getElementById("codigo-manual");
+
+      function resolver(codigo) {
+        codigo = (codigo || "").trim();
+        if (!codigo) return;
+        fetch(resolverUrl + "?codigo=" + encodeURIComponent(codigo))
+          .then(function (r) { return r.json(); })
+          .then(function (datos) {
+            if (datos.encontrada) {
+              window.location.href = datos.url;
+            } else {
+              estado.textContent = 'Código "' + codigo + '" no encontrado.';
+              aviso.innerHTML = "";
+              if (datos.url_nueva) {
+                const enlace = document.createElement("a");
+                enlace.href = datos.url_nueva;
+                enlace.textContent = "Registrar esta planta con este código";
+                aviso.appendChild(enlace);
+              }
+            }
+          });
+      }
+
+      if (window.Html5Qrcode) {
+        const lector = new Html5Qrcode("qr-reader");
+        lector.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          function (texto) { resolver(texto); },
+          function () {}
+        ).catch(function () {
+          estado.textContent = "No se pudo iniciar la cámara: usá el campo manual.";
+        });
+      }
+
+      form.addEventListener("submit", function (evento) {
+        evento.preventDefault();
+        resolver(campo.value);
+      });
+    })();
+  </script>
+{% endblock %}

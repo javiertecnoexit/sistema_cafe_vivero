@@ -1767,3 +1767,297 @@ class HistorialEstadoTests(TestCase):
         self.assertIn("Estado", contenido)
         self.assertNotIn("admin_historial", contenido)
 
+
+class HomeMobileTests(TestCase):
+    def setUp(self):
+        self.operario = get_user_model().objects.create_user(username="home_operario")
+        self.operario.groups.add(Group.objects.get(name="operario"))
+        self.admin = get_user_model().objects.create_user(username="home_admin")
+        self.admin.groups.add(Group.objects.get(name="admin"))
+
+    def test_home_operario(self):
+        self.client.force_login(self.operario)
+        respuesta = self.client.get("/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Buscar")
+        self.assertContains(respuesta, "Nuevo evento")
+        self.assertContains(respuesta, "Escanear código")
+        self.assertNotContains(respuesta, "Selección")
+        self.assertNotContains(respuesta, "Reportes")
+
+    def test_home_admin(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.get("/")
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Selección")
+        self.assertContains(respuesta, "Reportes")
+        self.assertContains(respuesta, "Etiquetas")
+
+    def test_home_sin_login_redirige(self):
+        respuesta = self.client.get("/")
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertIn("/accounts/login/", respuesta.url)
+
+
+class EscanearTests(TestCase):
+    def setUp(self):
+        self.usuario = get_user_model().objects.create_user(username="admin_escanear")
+        self.usuario.groups.add(Group.objects.get(name="admin"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.planta = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+
+    def test_get_escanear_autenticado(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(reverse("escanear"))
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "qr-reader")
+        self.assertContains(respuesta, "/static/nursery/html5-qrcode.min.js")
+
+    def test_escanear_sin_login_redirige(self):
+        respuesta = self.client.get(reverse("escanear"))
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertIn("/accounts/login/", respuesta.url)
+
+    def test_resolver_codigo(self):
+        self.client.force_login(self.usuario)
+        respuesta = self.client.get(
+            reverse("resolver_codigo"), {"codigo": "CAT-0001"}
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        datos = respuesta.json()
+        self.assertTrue(datos["encontrada"])
+        self.assertIn(reverse("ficha_planta", args=[self.planta.pk]), datos["url"])
+        respuesta_faltante = self.client.get(
+            reverse("resolver_codigo"), {"codigo": "CAT-9999"}
+        )
+        datos_faltante = respuesta_faltante.json()
+        self.assertFalse(datos_faltante["encontrada"])
+        self.assertIsNotNone(datos_faltante["url_nueva"])
+        self.assertTrue(
+            datos_faltante["url_nueva"].startswith(reverse("nueva_planta"))
+        )
+        self.assertIn("codigo=CAT-9999", datos_faltante["url_nueva"])
+
+
+class AltaPlantaBandejaTests(TestCase):
+    def setUp(self):
+        self.operario = get_user_model().objects.create_user(username="operario_alta")
+        self.operario.groups.add(Group.objects.get(name="operario"))
+        self.sin_grupo = get_user_model().objects.create_user(username="sin_grupo_alta")
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.proveedor = Proveedor.objects.create(nombre="Vivero San Martín")
+
+    def test_operario_crea_planta(self):
+        self.client.force_login(self.operario)
+        respuesta = self.client.post(
+            reverse("nueva_planta"),
+            {
+                "codigo": "CAT-0001",
+                "variedad": self.variedad.pk,
+                "origen": "propia",
+                "fecha_alta": "2026-09-15",
+                "contenedor": "maceta",
+            },
+        )
+        planta = Planta.objects.get(codigo="CAT-0001")
+        self.assertRedirects(
+            respuesta, reverse("ficha_planta", args=[planta.pk])
+        )
+        self.assertEqual(planta.variedad, self.variedad)
+        self.assertEqual(planta.origen, "propia")
+        self.assertEqual(planta.estado, "activa")
+
+    def test_codigo_duplicado_muestra_error(self):
+        Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+        self.client.force_login(self.operario)
+        respuesta = self.client.post(
+            reverse("nueva_planta"),
+            {
+                "codigo": "CAT-0001",
+                "variedad": self.variedad.pk,
+                "origen": "propia",
+                "fecha_alta": "2026-09-15",
+                "contenedor": "maceta",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "ya está asignado")
+        self.assertEqual(Planta.objects.count(), 1)
+
+    def test_origen_proveedor_sin_proveedor_error(self):
+        self.client.force_login(self.operario)
+        respuesta = self.client.post(
+            reverse("nueva_planta"),
+            {
+                "codigo": "CAT-0001",
+                "variedad": self.variedad.pk,
+                "origen": "proveedor",
+                "fecha_alta": "2026-09-15",
+                "contenedor": "maceta",
+            },
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(
+            respuesta,
+            "El proveedor es obligatorio cuando el origen es proveedor.",
+        )
+        self.assertEqual(Planta.objects.count(), 0)
+
+    def test_operario_crea_bandeja(self):
+        self.client.force_login(self.operario)
+        respuesta = self.client.post(
+            reverse("nueva_bandeja"),
+            {
+                "variedad": self.variedad.pk,
+                "origen": "propia",
+                "fecha_siembra": "2026-09-15",
+                "n_semillas": 50,
+            },
+        )
+        self.assertRedirects(respuesta, reverse("inicio"))
+        bandeja = Bandeja.objects.get()
+        self.assertEqual(bandeja.variedad, self.variedad)
+        self.assertEqual(bandeja.origen, "propia")
+        self.assertEqual(bandeja.n_semillas, 50)
+
+    def test_acceso_sin_permiso_o_sin_login(self):
+        respuesta_anon = self.client.get(reverse("nueva_planta"))
+        self.assertEqual(respuesta_anon.status_code, 302)
+        self.client.force_login(self.sin_grupo)
+        respuesta = self.client.get(reverse("nueva_bandeja"))
+        self.assertEqual(respuesta.status_code, 403)
+
+
+class CapturaCamaraFotoTests(TestCase):
+    def setUp(self):
+        self.operario = get_user_model().objects.create_user(username="operario_camara")
+        self.operario.groups.add(Group.objects.get(name="operario"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.planta = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+
+    def test_formulario_foto_tiene_capture(self):
+        self.client.force_login(self.operario)
+        respuesta = self.client.get(
+            reverse("foto_planta", args=[self.planta.pk])
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, 'capture="environment"')
+
+
+class EventoRapidoTests(TestCase):
+    def setUp(self):
+        self.operario = get_user_model().objects.create_user(username="operario_rapido")
+        self.operario.groups.add(Group.objects.get(name="operario"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.planta = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="propia",
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+        )
+        self.tipo_riego = TipoEvento.objects.create(nombre="Riego")
+        self.tipo_fito = TipoEvento.objects.create(nombre="Fitosanitario")
+
+    def _datos(self, tipo):
+        return {
+            "tipo": tipo.pk,
+            "fecha": "2026-09-11",
+            "producto": "",
+            "dosis": "",
+            "notas": "",
+            "alcance": "individual",
+            "codigo_individual": "CAT-0001",
+            "lote": "",
+            "codigos": "",
+        }
+
+    def test_evento_individual_rapido(self):
+        self.client.force_login(self.operario)
+        respuesta = self.client.post(
+            reverse("evento_nuevo"), self._datos(self.tipo_riego)
+        )
+        self.assertRedirects(respuesta, reverse("buscar_planta"))
+        evento = Evento.objects.get()
+        self.assertEqual(evento.autor, self.operario)
+        self.assertEqual(list(evento.plantas.all()), [self.planta])
+
+    def test_evento_fitosanitario_rapido_incrementa(self):
+        self.client.force_login(self.operario)
+        self.client.post(reverse("evento_nuevo"), self._datos(self.tipo_fito))
+        self.planta.refresh_from_db()
+        self.assertEqual(self.planta.n_eventos_fitosanitarios, 1)
+
+
+class VisibilidadRolTests(TestCase):
+    def setUp(self):
+        self.operario = get_user_model().objects.create_user(username="operario_visib")
+        self.operario.groups.add(Group.objects.get(name="operario"))
+        self.admin = get_user_model().objects.create_user(username="admin_visib")
+        self.admin.groups.add(Group.objects.get(name="admin"))
+        self.variedad = Variedad.objects.create(
+            nombre="Catuaí", especie="Coffea arabica"
+        )
+        self.proveedor = Proveedor.objects.create(nombre="Proveedor Confidencial")
+        self.planta = Planta.objects.create(
+            codigo="CAT-0001",
+            variedad=self.variedad,
+            origen="proveedor",
+            proveedor=self.proveedor,
+            fecha_alta=date(2026, 9, 1),
+            contenedor="maceta",
+            notas="Nota interna confidencial X",
+            score_vigor_actual=5,
+            score_sanidad_actual=4,
+        )
+
+    def test_ficha_operario_oculta_datos_sensibles(self):
+        self.client.force_login(self.operario)
+        respuesta = self.client.get(
+            reverse("ficha_planta", args=[self.planta.pk])
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "CAT-0001")
+        self.assertContains(respuesta, "Vigor actual")
+        self.assertNotContains(respuesta, "Proveedor Confidencial")
+        self.assertNotContains(respuesta, "Nota interna confidencial X")
+
+    def test_ficha_admin_muestra_datos_sensibles(self):
+        self.client.force_login(self.admin)
+        respuesta = self.client.get(
+            reverse("ficha_planta", args=[self.planta.pk])
+        )
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertContains(respuesta, "Proveedor Confidencial")
+        self.assertContains(respuesta, "Nota interna confidencial X")
+        self.assertNotContains(
+            respuesta,
+            "El historial de cambios de estado requiere un modelo propio",
+        )
+

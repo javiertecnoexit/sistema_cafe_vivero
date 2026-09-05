@@ -9,6 +9,10 @@
     <table class="datos">
       <tr><td>Variedad</td><td>{{ planta.variedad }}</td></tr>
       <tr><td>Origen</td><td>{{ planta.get_origen_display }}</td></tr>
+      {% if es_admin %}
+        <tr><td>Proveedor</td><td>{{ planta.proveedor|default:"—" }}</td></tr>
+        <tr><td>Notas internas</td><td>{{ planta.notas|default:"—" }}</td></tr>
+      {% endif %}
       <tr><td>Etapa</td><td>{{ planta.etapa|default:"—" }}</td></tr>
       <tr><td>Lote</td><td>{{ planta.lote|default:"—" }}</td></tr>
       <tr><td>Estado</td><td>{{ planta.get_estado_display }}</td></tr>
@@ -89,6 +93,5 @@
     {% else %}
       <p>Sin actividad registrada para esta planta.</p>
     {% endif %}
-    <p class="aviso" style="font-size:.85em">El historial de cambios de estado requiere un modelo propio (fase posterior); el estado actual se muestra arriba.</p>
   </div>
 {% endblock %}

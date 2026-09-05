@@ -1,8 +1,13 @@
 {% extends "nursery/base.html" %}
 {% block title %}Foto — {{ planta.codigo }}{% endblock %}
 {% block content %}
+  <style>
+    .card input[type=file] { display: block; width: 100%; padding: 1rem 0; }
+    .card label { font-size: 1.05rem; }
+  </style>
   <h2>Subir foto — {{ planta.codigo }}</h2>
   <div class="card">
+    <p>En el celular se abrirá la cámara para tomar la foto directamente.</p>
     <form method="post" enctype="multipart/form-data">
       {% csrf_token %}
       {{ form.as_p }}
