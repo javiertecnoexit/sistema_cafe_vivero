@@ -1968,6 +1968,26 @@ class CapturaCamaraFotoTests(TestCase):
         self.assertContains(respuesta, 'capture="environment"')
 
 
+class SeedCommandTests(TestCase):
+    def test_seed_idempotente(self):
+        from django.core.management import call_command
+
+        call_command("seed")
+        call_command("seed")
+        self.assertEqual(Variedad.objects.count(), 3)
+        self.assertEqual(TipoEvento.objects.count(), 7)
+        self.assertEqual(TipoFoto.objects.count(), 4)
+        self.assertEqual(EtapaFenologica.objects.count(), 3)
+        self.assertEqual(Lote.objects.count(), 1)
+        User = get_user_model()
+        admin = User.objects.get(username="admin")
+        self.assertTrue(admin.is_superuser)
+        self.assertTrue(admin.is_staff)
+        operario = User.objects.get(username="operario")
+        self.assertTrue(operario.groups.filter(name="operario").exists())
+        self.assertEqual(User.objects.count(), 2)
+
+
 class EventoRapidoTests(TestCase):
     def setUp(self):
         self.operario = get_user_model().objects.create_user(username="operario_rapido")

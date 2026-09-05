@@ -5,3 +5,5 @@ Pillow>=10.0
 django-storages>=1.14
 qrcode>=8.0
 python-barcode>=0.15
+gunicorn>=21
+whitenoise>=6

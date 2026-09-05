@@ -4,8 +4,28 @@
 > VPS gestionado con EasyPanel, usando Docker. Las **Fases 2 y 3** (sensores,
 > control y analítica) se incorporan más adelante, sin bloquear este despliegue.
 >
-> Estado actual del código: funciona en desarrollo (Django + PostgreSQL local,
-> `runserver`, media servido en `DEBUG`). Falta prepararlo para producción.
+> Estado actual del código: **listo para producción** (settings prod, gunicorn,
+> whitenoise, Dockerfile, docker-compose y comando `seed` incluidos).
+
+---
+
+## 0. Guía rápida (TL;DR)
+
+```bash
+# 1. Configurá las variables de entorno (copiá .env.example a .env y completá)
+cp .env.example .env   # en Windows: copy .env.example .env
+
+# 2. Levantá los contenedores (web + postgres)
+docker compose up -d --build
+
+# 3. Migrá, colectá estáticos y sembrá datos iniciales
+docker compose exec web python manage.py migrate
+docker compose exec web python manage.py collectstatic --noinput
+docker compose exec web python manage.py seed
+```
+
+Credenciales iniciales (ver §3b): admin `admin` / `admin12345`, operario
+`operario` / `clave12345`. **Cambialas en producción.**
 
 ---
 
@@ -78,13 +98,16 @@ Reverse proxy (Traefik, integrado en EasyPanel)
 - Volúmenes: `media` (persistente), `staticfiles` (o servido por whitenoise),
   `db_data` (datos de PostgreSQL).
 
-### 2.6 Comando de seed (nuevo, `nursery/management/commands/seed.py`)
+### 2.6 Comando de seed (`nursery/management/commands/seed.py`)
 
-- Crea el **superusuario** (admin) si no existe y los **catálogos iniciales**:
-  `Variedad`, `TipoEvento` (trasplante, fitosanitario, fertilización, riego, poda,
-  observación, cosecha), `TipoFoto` (general, hoja, evento, otra), `EtapaFenologica`,
-  y opcionalmente un `Lote` de ejemplo.
-- Idempotente (usa `get_or_create`).
+- Implementado. Crea (idempotente, `get_or_create`):
+  - **Superusuario** `admin` (password por defecto `admin12345`) y usuario
+    **operario** (`clave12345`) en el grupo `operario`.
+  - Catálogos iniciales: `Variedad` (Catuaí, Bourbon, Geisha), `TipoEvento`
+    (Trasplante, Fitosanitario, Fertilización, Riego, Poda, Observación, Cosecha),
+    `TipoFoto` (General, Hoja, Evento, Otra), `EtapaFenologica` (Germinación,
+    Plántula, Juvenil) y un `Lote` "Invernadero A".
+- Ejecutar: `python manage.py seed`.
 
 ---
 
@@ -101,9 +124,30 @@ Reverse proxy (Traefik, integrado en EasyPanel)
 | `DB_PASSWORD` | Contraseña de BD | (generar) |
 | `DB_HOST` | Host de BD (nombre del servicio) | `db` |
 | `DB_PORT` | Puerto de BD | `5432` |
+| `DJANGO_SUPERUSER_USERNAME` | Usuario admin del seed | `admin` |
+| `DJANGO_SUPERUSER_PASSWORD` | Contraseña admin del seed | `(generar)` |
 
-> Nota: `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS` son **nuevas** respecto al `.env`
-> de desarrollo; se añadirán a `.env.example` al implementar los cambios.
+> Nota: `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS` y `DJANGO_SUPERUSER_*` se añaden
+> a `.env.example` al implementar los cambios.
+
+---
+
+## 3b. Credenciales iniciales (tras ejecutar `seed`)
+
+| Rol | Usuario | Contraseña por defecto | Notas |
+|---|---|---|---|
+| Administrador (viverista) | `admin` | `admin12345` | **Cambiar tras el primer login.** Se define con `DJANGO_SUPERUSER_USERNAME`/`DJANGO_SUPERUSER_PASSWORD`. |
+| Operario | `operario` | `clave12345` | Cambiar si se desea; se define con `SEED_OPERARIO_PASSWORD`. |
+
+> **Importante (seguridad):** los valores por defecto sirven solo para el arranque
+> inicial. En producción, definí `DJANGO_SUPERUSER_PASSWORD` (y `SEED_OPERARIO_PASSWORD`)
+> con claves fuertes en el `.env` **antes** de correr `seed`, o cambiá las
+> contraseñas tras el primer acceso. El comando `seed` **no** sobrescribe la
+> contraseña de un usuario ya existente.
+
+Para dar de alta otros administradores/operarios, entrá al **Django Admin**
+(`/admin/`) con el superusuario y creá usuarios asignándolos al grupo `admin` o
+`operario`.
 
 ---
 
